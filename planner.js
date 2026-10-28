@@ -7,6 +7,7 @@ const FOCUS = {
   superior: ['empuje', 'tirón', 'empuje', 'tirón', 'core', 'cardio'],
   inferior: ['sentadilla', 'bisagra', 'sentadilla', 'bisagra', 'core', 'cardio'],
   cardio: ['cardio', 'core', 'cardio', 'sentadilla', 'empuje', 'cardio'],
+  beisbol: ['pliometría', 'rotacional', 'sentadilla', 'tirón', 'isométrico', 'cardio'],
 };
 
 export function plan(db, { clientIds, minutes = 45, focus = 'completo', equipment = [] }) {

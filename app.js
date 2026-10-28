@@ -1,56 +1,103 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-import { exercises as SEED_EX, demo } from './seed.js';
+import { demo } from './seed.js';
+import { exercises as LIB, mergeLibrary, LIB_VERSION } from './library.js';
 import { plan as rulesPlan } from './planner.js';
+import { generateProgram } from './program.js';
+import { calcTargets, buildMenu, trackTips, latestWeight, RESTRICTIONS, ACTIVITY } from './nutrition.js';
 
 const SB_URL = 'https://qqgdbdbdfecppehwyezm.supabase.co';
 const SB_KEY = 'sb_publishable_ljrk5vR6YAvpHs68RehEYw_mLclqIcu';
 const sb = createClient(SB_URL, SB_KEY);
 let USER = null;
+
+// ---------- Utilidades ----------
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const uid = (p) => p + Math.random().toString(36).slice(2, 8);
 const today = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };
 const money = (n) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n || 0);
 const fdate = (s) => (s ? new Date(s + 'T12:00').toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' }) : '—');
-const LEVELS = [['principiante', 'Principiante'], ['intermedio', 'Intermedio'], ['avanzado', 'Avanzado']];
-const PATTERNS = ['sentadilla', 'empuje', 'bisagra', 'tirón', 'core', 'cardio'];
-const EQUIP = ['mancuernas', 'banda', 'banco', 'barra', 'máquina', 'cuerda', 'rueda', 'cuerda pesada'];
+const daysAgo = (s) => Math.floor((Date.now() - new Date(s + 'T12:00').getTime()) / 864e5);
+const initials = (n) => n.split(/\s+/).slice(0, 2).map((x) => x[0]).join('').toUpperCase();
+const hue = (s) => [...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
 
-let S, tab = {}, ui = { plan: { clientIds: [], minutes: 45, focus: 'completo', equipment: ['mancuernas', 'banda', 'banco'], useAI: true }, result: null, busy: false }, tmr;
+const LEVELS = [['principiante', 'Principiante'], ['intermedio', 'Intermedio'], ['avanzado', 'Avanzado']];
+const TRACKS = [['general', 'General / salud'], ['beisbol', 'Béisbol'], ['fisicoculturismo', 'Fisicoculturismo / hipertrofia']];
+const TRACK_NAME = { general: 'General', beisbol: 'Béisbol', fisicoculturismo: 'Fisicoculturismo' };
+const PATTERNS = ['sentadilla', 'bisagra', 'empuje', 'tirón', 'core', 'rotacional', 'pliometría', 'isométrico', 'cuidado del brazo', 'cardio', 'aislamiento'];
+const GROUPS = ['pecho', 'espalda', 'hombro', 'bíceps', 'tríceps', 'cuádriceps', 'isquios', 'glúteo', 'pantorrilla', 'abdomen', 'lumbar', 'trapecio', 'antebrazo', 'cuerpo completo'];
+const TYPES = ['fuerza', 'potencia', 'isométrico', 'core', 'cardio', 'cuidado del brazo', 'movilidad'];
+const EQUIP = ['mancuernas', 'barra', 'kettlebell', 'banda', 'banco', 'polea', 'máquina', 'balón medicinal', 'caja', 'barra de dominadas', 'cuerda', 'rueda', 'trineo', 'cuerda pesada'];
+const INJURIES = ['rodilla', 'hombro', 'espalda', 'muñeca', 'codo', 'impacto'];
+const PARQ = ['¿Algún médico te dijo que tienes un problema del corazón o presión alta?', '¿Sientes dolor en el pecho al hacer actividad física?', '¿Has sentido dolor en el pecho en reposo en el último mes?', '¿Pierdes el equilibrio por mareo o has perdido el conocimiento?', '¿Tienes un problema de huesos o articulaciones que empeora con el ejercicio?', '¿Tomas medicamentos para la presión o el corazón?', '¿Sabes de otra razón por la que no deberías hacer ejercicio?'];
+
+let S, tab = {}, tmr, ui = {
+  plan: { clientIds: [], minutes: 45, focus: 'completo', equipment: ['mancuernas', 'banda', 'banco'], useAI: true }, result: null, busy: false,
+  lib: { q: '', pattern: '', grp: '', type: '', level: '', tag: '' }, draft: null, nut: null,
+};
 const cl = (id) => S.clients.find((c) => c.id === id);
 const ex = (id) => S.exercises.find((e) => e.id === id);
+const find = (col, id) => S[col].find((x) => x.id === id);
+const del = (col, id) => { S[col] = S[col].filter((x) => x.id !== id); };
+
 const flush = async () => { tmr = null; const { error } = await sb.from('coach_data').upsert({ user_id: USER.id, data: S, updated_at: new Date().toISOString() }); if (error) toast('Error al guardar: ' + error.message); };
 const save = () => { clearTimeout(tmr); tmr = setTimeout(flush, 400); };
 window.addEventListener('beforeunload', () => { if (tmr) flush(); });
-const toast = (m) => { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), 2400); };
+const toast = (m) => { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), 2600); };
 const closeModal = () => { $('#modal').hidden = true; $('#modal').innerHTML = ''; };
 const copy = async (txt) => { try { await navigator.clipboard.writeText(txt); toast('Copiado ✓'); } catch { prompt('Copia el texto:', txt); } };
-const opts = (list, sel) => list.map(([a, b]) => `<option value="${esc(a)}" ${a === sel ? 'selected' : ''}>${esc(b)}</option>`).join('');
-const clientOpts = (sel, blank) => (blank ? `<option value="">${blank}</option>` : '') + opts(S.clients.map((c) => [c.id, c.name]), sel);
+const opts = (list, sel) => list.map(([a, b]) => `<option value="${esc(a)}" ${String(a) === String(sel) ? 'selected' : ''}>${esc(b)}</option>`).join('');
+const plain = (arr) => arr.map((x) => [x, x]);
+function setPath(o, path, v) { const k = path.split('.'); const last = k.pop(); for (const p of k) o = o[p]; o[last] = v; }
 
-function setPath(o, path, v) {
-  const k = path.split('.'); const last = k.pop();
-  for (const p of k) o = o[p];
-  o[last] = v;
-}
+// ---------- Iconos ----------
+const IC = {
+  home: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10',
+  users: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
+  cal: 'M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M16 2v4 M8 2v4 M3 10h18',
+  clip: 'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2 M9 2h6v4H9z M9 12h6 M9 16h6',
+  grid: 'M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z',
+  leaf: 'M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12',
+  team: 'M12 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M4 21v-1a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5v1 M3 9a2 2 0 1 0 0 4 M21 9a2 2 0 1 1 0 4',
+  zap: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
+  dollar: 'M12 1v22 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
+  cog: 'M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M1 14h6 M9 8h6 M17 16h6',
+  plus: 'M12 5v14 M5 12h14', search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z M21 21l-4.35-4.35', check: 'M20 6L9 17l-5-5',
+  alert: 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z M12 9v4 M12 17h.01',
+  out: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9',
+  print: 'M6 9V2h12v7 M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2 M6 14h12v8H6z',
+  copy: 'M9 9h13v13H9z M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1',
+  trash: 'M3 6h18 M8 6V4h8v2 M19 6l-1 14H6L5 6', edit: 'M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z',
+  eye: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', back: 'M15 18l-6-6 6-6',
+  chat: 'M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2-5.4A8.5 8.5 0 1 1 21 11.5z', menu: 'M3 6h18 M3 12h18 M3 18h18',
+  heart: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z',
+};
+const ic = (n, s = 18) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${IC[n]}"/></svg>`;
+const btn = (label, act, attrs = '', icon = '', cls = '') => `<button class="${cls}" data-act="${act}" ${attrs}>${icon ? ic(icon, 16) : ''}${label}</button>`;
+const page = (title, sub, actions, body) => `<header class="ph"><div><h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ''}</div><div class="pa">${actions || ''}</div></header>${body}`;
+const avatar = (n, big) => `<span class="av ${big ? 'big' : ''}" style="--h:${hue(n)}">${esc(initials(n))}</span>`;
+const trackTag = (t) => `<span class="tag t-${t || 'general'}">${TRACK_NAME[t || 'general']}</span>`;
 
+// ---------- Formularios ----------
 function form(title, fields, v = {}) {
   return new Promise((res) => {
     const m = $('#modal'); m.hidden = false;
     const f = fields.map((x) => {
+      if (x.h) return `<h3 class="fh">${x.h}</h3>`;
       const val = v[x.k]; let inp;
       if (x.t === 'select') inp = `<select name="${x.k}">${opts(x.o, val)}</select>`;
       else if (x.t === 'checks') inp = `<div class="checks">${x.o.map(([a, b]) => `<label><input type="checkbox" name="${x.k}" value="${esc(a)}" ${(val || []).includes(a) ? 'checked' : ''}>${esc(b)}</label>`).join('') || '<span class="mute">Sin opciones</span>'}</div>`;
       else if (x.t === 'textarea') inp = `<textarea name="${x.k}">${esc(val)}</textarea>`;
       else if (x.t === 'tags') inp = `<input name="${x.k}" value="${esc((val || []).join(', '))}" placeholder="${esc(x.ph || 'separados por coma')}">`;
       else inp = `<input name="${x.k}" type="${x.t || 'text'}" value="${esc(val)}" ${x.step ? `step="${x.step}"` : ''} ${x.req ? 'required' : ''} placeholder="${esc(x.ph || '')}">`;
-      return `<label>${x.l}</label>${inp}`;
+      return `<label class="fl">${x.l}</label>${inp}`;
     }).join('');
-    m.innerHTML = `<form class="dlg"><h2 style="margin-top:0">${title}</h2>${f}<div class="bar"><span class="grow"></span><button type="button" data-x="cancel">Cancelar</button><button class="pri">Guardar</button></div></form>`;
+    m.innerHTML = `<form class="dlg"><h2>${title}</h2>${f}<div class="bar end"><button type="button" data-x="cancel">Cancelar</button><button class="pri">Guardar</button></div></form>`;
     const fm = m.firstChild;
     fm.onsubmit = (ev) => {
       ev.preventDefault(); const out = {};
       for (const x of fields) {
+        if (x.h) continue;
         if (x.t === 'checks') out[x.k] = [...fm.querySelectorAll(`[name="${x.k}"]:checked`)].map((i) => i.value);
         else {
           let val = fm.elements[x.k].value;
@@ -64,109 +111,199 @@ function form(title, fields, v = {}) {
     fm.querySelector('[data-x=cancel]').onclick = () => { closeModal(); res(null); };
   });
 }
-function dialog(html) {
+function dialog(html, wide) {
   const m = $('#modal'); m.hidden = false;
-  m.innerHTML = `<div class="dlg">${html}<div class="bar"><span class="grow"></span><button data-act="close">Cerrar</button></div></div>`;
+  m.innerHTML = `<div class="dlg ${wide ? 'wide' : ''}">${html}<div class="bar end"><button data-act="close">Cerrar</button></div></div>`;
 }
 
 // ---------- Vistas ----------
 const V = {};
+const apptIds = (a) => (a.groupId ? S.groups.find((g) => g.id === a.groupId)?.clientIds || [] : a.clientIds || []);
+const apptWho = (a) => (a.groupId ? S.groups.find((g) => g.id === a.groupId)?.name || 'Grupo' : (a.clientIds || []).map((i) => cl(i)?.name).filter(Boolean).join(', ') || '—');
+const apptSort = (a, b) => (a.date + a.time).localeCompare(b.date + b.time);
+const payTag = (p) => (p.status === 'pagado' ? `<span class="tag ok">Pagado ${fdate(p.paidOn)}</span>` : p.due < today() ? '<span class="tag bad">Vencido</span>' : '<span class="tag warn">Pendiente</span>');
+const lastCheckin = (c) => [...(c.checkins || [])].sort((a, b) => b.date.localeCompare(a.date))[0];
 
 V.home = () => {
   const t = today(), month = t.slice(0, 7);
   const active = S.clients.filter((c) => c.active);
-  const income = S.payments.filter((p) => p.status === 'pagado' && p.paidOn.startsWith(month)).reduce((a, p) => a + p.amount, 0);
-  const pend = S.payments.filter((p) => p.status !== 'pagado');
-  const late = pend.filter((p) => p.due < t);
-  const next = S.appointments.filter((a) => a.date >= t && a.status === 'programada').sort(apptSort).slice(0, 6);
-  return `<h1>Hola, coach 👋</h1><p class="sub">Resumen de hoy, ${fdate(t)}</p>
-  <div class="grid">
-    <div class="card stat">${active.length}<small>Clientes activos</small></div>
-    <div class="card stat">${money(income)}<small>Cobrado este mes</small></div>
-    <div class="card stat">${money(pend.reduce((a, p) => a + p.amount, 0))}<small>Por cobrar (${pend.length})</small></div>
-    <div class="card stat" style="color:${late.length ? 'var(--bad)' : 'inherit'}">${late.length}<small>Pagos vencidos</small></div>
-  </div>
-  <div class="two"><div class="card"><h3>Próximas citas</h3>${next.length ? next.map((a) => `<div class="row sp"><span><b>${fdate(a.date)}</b> ${a.time} · ${esc(apptWho(a))}</span><span class="tag">${a.type}</span></div>`).join('') : '<p class="mute">Sin citas próximas.</p>'}<div class="bar"><a class="btn" href="#/agenda">Ver agenda</a></div></div>
-  <div class="card"><h3>Pagos vencidos</h3>${late.length ? late.map((p) => `<div class="row sp"><span>${esc(cl(p.clientId)?.name || '?')} · ${money(p.amount)}</span><span class="tag bad">${fdate(p.due)}</span></div>`).join('') : '<p class="mute">Todo al corriente 🎉</p>'}<div class="bar"><a class="btn" href="#/pagos">Ir a pagos</a></div></div></div>
-  <div class="card"><h3>✨ Entrenamiento grupal con IA</h3><p class="mute">Elige a los clientes de una sesión y genera un circuito donde todos participan, adaptado a nivel y lesiones de cada uno, con el tiempo de atención que merece cada cliente.</p><a class="btn pri" href="#/entrenar">Crear sesión grupal</a></div>`;
+  const income = S.payments.filter((p) => p.status === 'pagado' && (p.paidOn || '').startsWith(month)).reduce((a, p) => a + p.amount, 0);
+  const pend = S.payments.filter((p) => p.status !== 'pagado'), late = pend.filter((p) => p.due < t);
+  const todays = S.appointments.filter((a) => a.date === t && a.status === 'programada').sort(apptSort);
+  const next = S.appointments.filter((a) => a.date > t && a.status === 'programada').sort(apptSort).slice(0, 4);
+  // ingresos de los últimos 6 meses
+  const months = Array.from({ length: 6 }, (_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 5 + i); return d.toISOString().slice(0, 7); });
+  const inc = months.map((m) => S.payments.filter((p) => p.status === 'pagado' && (p.paidOn || '').startsWith(m)).reduce((a, p) => a + p.amount, 0));
+  const mx = Math.max(...inc, 1);
+  const alerts = [];
+  late.forEach((p) => alerts.push(['bad', `${esc(cl(p.clientId)?.name || '?')} debe ${money(p.amount)} (vencía ${fdate(p.due)})`, '#/pagos']));
+  active.forEach((c) => {
+    const lc = lastCheckin(c);
+    if (!lc || daysAgo(lc.date) > 14) alerts.push(['warn', `${esc(c.name)} no tiene check-in en ${lc ? daysAgo(lc.date) + ' días' : 'el sistema'}`, '#/cliente/' + c.id]);
+    if (c.parq?.a?.length && !c.parq.cleared) alerts.push(['bad', `${esc(c.name)}: screening con respuestas "Sí" sin autorización médica registrada`, '#/cliente/' + c.id]);
+    if (!c.routineId) alerts.push(['info', `${esc(c.name)} no tiene programa asignado`, '#/cliente/' + c.id]);
+  });
+  const brand = S.settings?.brand;
+  return page(`Hola${brand ? ', ' + esc(brand) : ', coach'} 👋`, `Hoy es ${fdate(t)}`, btn('Nuevo cliente', 'client-new', '', 'plus', 'pri'),
+    `<div class="kpis">
+      <div class="kpi"><span class="k-ic">${ic('users')}</span><b>${active.length}</b><small>Clientes activos</small></div>
+      <div class="kpi"><span class="k-ic g">${ic('dollar')}</span><b>${money(income)}</b><small>Cobrado este mes</small></div>
+      <div class="kpi"><span class="k-ic w">${ic('clip')}</span><b>${money(pend.reduce((a, p) => a + p.amount, 0))}</b><small>Por cobrar (${pend.length})</small></div>
+      <div class="kpi ${late.length ? 'alert' : ''}"><span class="k-ic r">${ic('alert')}</span><b>${late.length}</b><small>Pagos vencidos</small></div></div>
+    <div class="cols"><section class="card"><h3>Hoy</h3>${todays.length ? todays.map((a) => `<div class="li"><b>${a.time}</b><span>${esc(apptWho(a))}</span><span class="tag">${a.type}</span></div>`).join('') : '<p class="mute">Sin citas para hoy.</p>'}
+        <h3 style="margin-top:14px">Próximas</h3>${next.length ? next.map((a) => `<div class="li"><b>${fdate(a.date)} ${a.time}</b><span>${esc(apptWho(a))}</span></div>`).join('') : '<p class="mute">Nada agendado.</p>'}
+        <div class="bar">${btn('Ver agenda', 'go', 'data-to="#/agenda"', 'cal')}</div></section>
+      <section class="card"><h3>Ingresos · 6 meses</h3><div class="chart">${inc.map((v, i) => `<div class="cb"><i style="height:${Math.max(4, (v / mx) * 100)}%" title="${money(v)}"></i><small>${new Date(months[i] + '-15').toLocaleDateString('es-MX', { month: 'short' })}</small></div>`).join('')}</div></section></div>
+    <section class="card"><h3>Atención requerida</h3>${alerts.length ? alerts.slice(0, 8).map((a) => `<a class="al ${a[0]}" href="${a[2]}">${ic(a[0] === 'info' ? 'clip' : 'alert', 16)}<span>${a[1]}</span></a>`).join('') : '<p class="mute">Todo en orden 🎉</p>'}</section>
+    <section class="card hero"><div><h3>✨ Entrenamiento grupal con IA</h3><p>Elige a los clientes de una sesión y genera un circuito donde todos participan, adaptado a nivel y lesiones de cada uno, con el tiempo de atención que merece cada cliente.</p></div>${btn('Crear sesión grupal', 'go', 'data-to="#/entrenar"', 'zap', 'pri')}</section>`);
 };
 
 V.clientes = () => {
-  const q = (ui.q || '').toLowerCase();
-  const list = S.clients.filter((c) => c.name.toLowerCase().includes(q) || (c.goal || '').toLowerCase().includes(q));
-  return `<h1>Clientes</h1><p class="sub">${S.clients.length} registrados</p>
-  <div class="bar"><input id="q" placeholder="Buscar…" value="${esc(ui.q || '')}" style="max-width:260px"><span class="grow"></span><button class="pri" data-act="client-new">+ Nuevo cliente</button></div>
-  <div class="grid">${list.map((c) => `<a class="card" href="#/cliente/${c.id}" style="text-decoration:none;color:inherit"><div class="row sp"><h3>${esc(c.name)}</h3>${c.active ? '' : '<span class="tag warn">Inactivo</span>'}</div>
-    <div class="mute">${esc(c.goal || 'Sin objetivo')}</div>
-    <div><span class="tag">${c.level}</span>${c.injuries.map((i) => `<span class="tag bad">⚠ ${esc(i)}</span>`).join('')}</div>
-    <div class="mute" style="margin-top:6px">${esc(S.plans.find((p) => p.id === c.planId)?.name || 'Sin plan')}</div></a>`).join('') || '<p class="mute">Sin resultados.</p>'}</div>`;
+  const q = (ui.q || '').toLowerCase(), tf = ui.tf || '';
+  const list = S.clients.filter((c) => (c.name.toLowerCase().includes(q) || (c.goal || '').toLowerCase().includes(q)) && (!tf || (c.track || 'general') === tf));
+  return page('Clientes', `${S.clients.length} registrados`, btn('Nuevo cliente', 'client-new', '', 'plus', 'pri'),
+    `<div class="bar"><div class="search">${ic('search', 16)}<input id="q" placeholder="Buscar cliente u objetivo…" value="${esc(ui.q || '')}"></div>
+      <div class="seg">${[['', 'Todos'], ...TRACKS.map(([k]) => [k, TRACK_NAME[k]])].map(([k, l]) => `<button class="${tf === k ? 'on' : ''}" data-act="tf" data-v="${k}">${l}</button>`).join('')}</div></div>
+    <div class="grid">${list.map((c) => {
+      const lc = lastCheckin(c), w = latestWeight(c).weight;
+      return `<a class="card cc" href="#/cliente/${c.id}">${avatar(c.name)}<div class="cc-b"><div class="row sp"><h3>${esc(c.name)}</h3>${c.active ? '' : '<span class="tag warn">Inactivo</span>'}</div>
+        <div class="mute">${esc(c.goal || 'Sin objetivo')}</div>
+        <div class="tags">${trackTag(c.track)}<span class="tag">${c.level}</span>${c.injuries.map((i) => `<span class="tag bad">⚠ ${esc(i)}</span>`).join('')}</div>
+        <div class="mini">${w ? `${w} kg · ` : ''}${esc(S.plans.find((p) => p.id === c.planId)?.name || 'Sin plan')}${lc ? ` · check-in hace ${daysAgo(lc.date)} d` : ''}</div></div></a>`;
+    }).join('') || '<p class="mute">Sin resultados.</p>'}</div>`);
 };
 
 const clientFields = () => [
-  { k: 'name', l: 'Nombre', req: 1 }, { k: 'phone', l: 'WhatsApp (con lada, ej. 5215512345678)' }, { k: 'email', l: 'Correo', t: 'email' },
-  { k: 'goal', l: 'Objetivo' }, { k: 'level', l: 'Nivel', t: 'select', o: LEVELS },
-  { k: 'injuries', l: 'Lesiones / limitaciones (rodilla, hombro, espalda, muñeca, impacto…)', t: 'tags' },
-  { k: 'planId', l: 'Plan', t: 'select', o: [['', 'Sin plan'], ...S.plans.map((p) => [p.id, `${p.name} · ${money(p.price)}`])] },
-  { k: 'routineId', l: 'Rutina asignada', t: 'select', o: [['', 'Ninguna'], ...S.routines.map((r) => [r.id, r.name])] },
+  { h: 'Datos básicos' }, { k: 'name', l: 'Nombre', req: 1 }, { k: 'phone', l: 'WhatsApp (con lada, ej. 5215512345678)' }, { k: 'email', l: 'Correo', t: 'email' },
+  { k: 'goal', l: 'Objetivo principal' }, { k: 'notes', l: 'Notas (historial, preferencias)', t: 'textarea' },
+  { h: 'Perfil deportivo' }, { k: 'track', l: 'Tipo de entrenamiento', t: 'select', o: TRACKS }, { k: 'level', l: 'Nivel', t: 'select', o: LEVELS },
+  { k: 'injuries', l: 'Lesiones / limitaciones (rodilla, hombro, espalda, muñeca, codo, impacto)', t: 'tags' },
+  { k: 'daysPerWeek', l: 'Días de entrenamiento por semana', t: 'number' },
+  { k: 'equipment', l: 'Equipo disponible (peso corporal siempre)', t: 'checks', o: plain(EQUIP) },
+  { k: 'position', l: 'Solo béisbol · posición', t: 'select', o: [['lanzador', 'Lanzador'], ['jugador de campo', 'Jugador de campo'], ['receptor', 'Receptor']] },
+  { k: 'season', l: 'Solo béisbol · fase de temporada', t: 'select', o: [['fuera de temporada', 'Fuera de temporada'], ['pretemporada', 'Pretemporada'], ['temporada', 'En temporada']] },
+  { k: 'phase', l: 'Solo fisicoculturismo · fase', t: 'select', o: [['volumen', 'Volumen'], ['definición', 'Definición'], ['mantenimiento', 'Mantenimiento']] },
+  { h: 'Datos para nutrición' }, { k: 'sex', l: 'Sexo', t: 'select', o: [['m', 'Hombre'], ['f', 'Mujer']] }, { k: 'age', l: 'Edad', t: 'number' }, { k: 'height', l: 'Estatura (cm)', t: 'number' },
+  { k: 'activity', l: 'Nivel de actividad diaria', t: 'select', o: ACTIVITY }, { k: 'foodsAvoid', l: 'Evitar (alergias / preferencias)', t: 'checks', o: RESTRICTIONS },
+  { h: 'Plan y asignaciones' }, { k: 'planId', l: 'Plan de pago', t: 'select', o: [['', 'Sin plan'], ...S.plans.map((p) => [p.id, `${p.name} · ${money(p.price)}`])] },
+  { k: 'routineId', l: 'Programa asignado', t: 'select', o: [['', 'Ninguno'], ...S.routines.map((r) => [r.id, r.name])] },
   { k: 'dietId', l: 'Dieta asignada', t: 'select', o: [['', 'Ninguna'], ...S.diets.map((r) => [r.id, r.name])] },
-  { k: 'notes', l: 'Notas', t: 'textarea' },
   { k: 'active', l: 'Estado', t: 'select', o: [['1', 'Activo'], ['0', 'Inactivo']] },
 ];
+const newClientDefaults = () => ({ level: 'principiante', track: 'general', active: '1', injuries: [], daysPerWeek: 3, equipment: ['mancuernas', 'banda', 'banco'], sex: 'm', activity: 1.55, foodsAvoid: [], season: 'fuera de temporada', phase: 'volumen', position: 'lanzador' });
 
 V.cliente = (id) => {
   const c = cl(id); if (!c) return '<p>Cliente no encontrado.</p>';
   const t = tab.cliente || 'resumen';
-  const tabs = [['resumen', 'Resumen'], ['progreso', 'Progreso'], ['carpeta', 'Carpeta'], ['pagos', 'Pagos']];
+  const tabs = [['resumen', 'Resumen'], ['programa', 'Programa'], ['nutricion', 'Nutrición'], ['progreso', 'Progreso'], ['carpeta', 'Carpeta'], ['pagos', 'Pagos'], ['ficha', 'Ficha de salud']];
+  const r = S.routines.find((x) => x.id === c.routineId), d = S.diets.find((x) => x.id === c.dietId);
   let body = '';
   if (t === 'resumen') {
-    const r = S.routines.find((x) => x.id === c.routineId), d = S.diets.find((x) => x.id === c.dietId), p = S.plans.find((x) => x.id === c.planId);
+    const p = S.plans.find((x) => x.id === c.planId);
     const gs = S.groups.filter((g) => g.clientIds.includes(c.id));
     const ap = S.appointments.filter((a) => a.date >= today() && apptIds(a).includes(c.id)).sort(apptSort).slice(0, 4);
-    body = `<div class="two"><div class="card"><div class="row sp"><h3>Perfil</h3><button class="sm" data-act="client-edit" data-id="${c.id}">Editar</button></div>
-      <p><b>Objetivo:</b> ${esc(c.goal) || '—'}<br><b>Nivel:</b> ${c.level}<br><b>Plan:</b> ${esc(p?.name || '—')}<br><b>WhatsApp:</b> ${esc(c.phone) || '—'}</p>
-      <div>${c.injuries.map((i) => `<span class="tag bad">⚠ ${esc(i)}</span>`).join('') || '<span class="mute">Sin lesiones registradas</span>'}</div>
-      <p class="mute">${esc(c.notes)}</p></div>
-      <div class="card"><h3>Asignado</h3>
-      <p><b>Rutina:</b> ${r ? `<a href="#/rutina/${r.id}">${esc(r.name)}</a> <button class="sm" data-act="copy-routine" data-id="${r.id}">Copiar para WhatsApp</button>` : '—'}</p>
-      <p><b>Dieta:</b> ${d ? `<a href="#/dieta/${d.id}">${esc(d.name)}</a> <button class="sm" data-act="copy-diet" data-id="${d.id}">Copiar para WhatsApp</button>` : '—'}</p>
+    const m = new Date().toISOString().slice(0, 7);
+    const used = S.appointments.filter((a) => a.status === 'realizada' && a.date.startsWith(m) && apptIds(a).includes(c.id)).length;
+    const lc = lastCheckin(c), w = latestWeight(c);
+    body = `<div class="cols"><section class="card"><div class="row sp"><h3>Perfil</h3>${btn('Editar', 'client-edit', `data-id="${c.id}"`, 'edit', 'sm')}</div>
+      <dl class="dl"><dt>Objetivo</dt><dd>${esc(c.goal) || '—'}</dd><dt>Tipo</dt><dd>${trackTag(c.track)} ${c.track === 'beisbol' ? `<span class="mute">${esc(c.position || '')} · ${esc(c.season || '')}</span>` : c.track === 'fisicoculturismo' ? `<span class="mute">${esc(c.phase || '')}</span>` : ''}</dd>
+      <dt>Nivel</dt><dd>${c.level}</dd><dt>Días/sem</dt><dd>${c.daysPerWeek || '—'}</dd><dt>Plan</dt><dd>${esc(p?.name || '—')}${p ? ` · <span class="mute">${used}/${p.sessions} sesiones este mes</span>` : ''}</dd><dt>Peso</dt><dd>${w.weight ? w.weight + ' kg' : '—'}</dd><dt>WhatsApp</dt><dd>${esc(c.phone) || '—'}</dd></dl>
+      <div class="tags">${c.injuries.map((i) => `<span class="tag bad">⚠ ${esc(i)}</span>`).join('') || '<span class="mute">Sin lesiones registradas</span>'}</div><p class="mute">${esc(c.notes)}</p></section>
+      <section class="card"><h3>Asignado</h3>
+      <p><b>Programa:</b> ${r ? `<a href="#/rutina/${r.id}">${esc(r.name)}</a>` : '<span class="mute">—</span> ' + btn('Crear', 'tab', 'data-k="cliente" data-v="programa"', '', 'sm')}</p>
+      <p><b>Dieta:</b> ${d ? `<a href="#/dieta/${d.id}">${esc(d.name)}</a>` : '<span class="mute">—</span> ' + btn('Crear', 'tab', 'data-k="cliente" data-v="nutricion"', '', 'sm')}</p>
       <p><b>Grupos:</b> ${gs.map((g) => `<span class="tag">${esc(g.name)}</span>`).join('') || '—'}</p>
-      <h3>Próximas citas</h3>${ap.map((a) => `<div>${fdate(a.date)} ${a.time} <span class="tag">${a.type}</span></div>`).join('') || '<span class="mute">Ninguna</span>'}</div></div>
-      <div class="bar"><button class="del" data-act="client-del" data-id="${c.id}">Eliminar cliente</button></div>`;
+      <p><b>Último check-in:</b> ${lc ? `${fdate(lc.date)} · adherencia ${lc.adherence}/5 · energía ${lc.energy}/5` : '—'}</p>
+      <h3 style="margin-top:12px">Próximas citas</h3>${ap.map((a) => `<div class="li"><b>${fdate(a.date)} ${a.time}</b><span class="tag">${a.type}</span></div>`).join('') || '<span class="mute">Ninguna</span>'}</section></div>
+      <div class="bar">${c.phone ? `<a class="btn" target="_blank" href="https://wa.me/${c.phone.replace(/\D/g, '')}">${ic('chat', 16)}WhatsApp</a>` : ''}<a class="btn" href="#/hoja/${c.id}">${ic('print', 16)}Hoja imprimible</a><span class="grow"></span>${btn('Eliminar cliente', 'client-del', `data-id="${c.id}"`, 'trash', 'del')}</div>`;
+  } else if (t === 'programa') {
+    body = programTab(c, r);
+  } else if (t === 'nutricion') {
+    body = nutritionTab(c, d);
   } else if (t === 'progreso') {
     const m = [...c.measures].sort((a, b) => a.date.localeCompare(b.date));
     const w = m.filter((x) => x.weight !== '' && x.weight != null);
-    body = `<div class="bar"><button class="pri" data-act="measure-add" data-id="${c.id}">+ Registrar medidas</button></div>
-      ${w.length > 1 ? `<div class="card">${spark(w.map((x) => x.weight))}<p class="mute">Peso: ${w[0].weight} → ${w.at(-1).weight} kg (${(w.at(-1).weight - w[0].weight).toFixed(1)} kg)</p></div>` : ''}
-      <div class="card"><table><tr><th>Fecha</th><th>Peso kg</th><th>% grasa</th><th>Cintura cm</th><th>Nota</th><th></th></tr>
-      ${m.map((x) => `<tr><td>${fdate(x.date)}</td><td>${x.weight ?? ''}</td><td>${x.fat ?? ''}</td><td>${x.waist ?? ''}</td><td>${esc(x.note)}</td><td><button class="sm del" data-act="measure-del" data-id="${c.id}" data-i="${c.measures.indexOf(x)}">✕</button></td></tr>`).join('') || '<tr><td colspan=6 class="mute">Aún sin registros.</td></tr>'}</table></div>`;
+    const ck = [...(c.checkins || [])].sort((a, b) => b.date.localeCompare(a.date));
+    body = `<div class="bar">${btn('Registrar medidas', 'measure-add', `data-id="${c.id}"`, 'plus', 'pri')}${btn('Check-in semanal', 'checkin-add', `data-id="${c.id}"`, 'heart')}</div>
+      <div class="cols"><section class="card"><h3>Peso</h3>${w.length > 1 ? spark(w.map((x) => x.weight)) + `<p class="mute">${w[0].weight} → ${w.at(-1).weight} kg (${(w.at(-1).weight - w[0].weight).toFixed(1)} kg)</p>` : '<p class="mute">Registra al menos 2 pesos para ver la gráfica.</p>'}</section>
+      <section class="card"><h3>Check-ins</h3>${ck.length ? `<div class="chips">${['adherence:Adherencia', 'energy:Energía'].map((kv) => { const [k, l] = kv.split(':'); const avg = ck.slice(0, 4).reduce((a, x) => a + (x[k] || 0), 0) / Math.min(4, ck.length); return `<span class="chip">${l} <b>${avg.toFixed(1)}/5</b></span>`; }).join('')}</div>` : ''}
+      ${ck.slice(0, 6).map((x) => `<div class="li"><b>${fdate(x.date)}</b><span>Adh ${x.adherence}/5 · Energía ${x.energy}/5 · Sueño ${x.sleep || '—'} h${x.pain ? ` · ⚠ ${esc(x.pain)}` : ''}${x.note ? `<br><span class="mute">${esc(x.note)}</span>` : ''}</span><button class="sm del" data-act="checkin-del" data-id="${c.id}" data-i="${c.checkins.indexOf(x)}">${ic('trash', 14)}</button></div>`).join('') || '<p class="mute">Aún sin check-ins. Pídele cada semana cómo va y regístralo aquí.</p>'}</section></div>
+      <section class="card"><h3>Medidas</h3><div class="tw"><table><tr><th>Fecha</th><th>Peso kg</th><th>% grasa</th><th>Cintura cm</th><th>Nota</th><th></th></tr>${m.map((x) => `<tr><td>${fdate(x.date)}</td><td>${x.weight ?? ''}</td><td>${x.fat ?? ''}</td><td>${x.waist ?? ''}</td><td>${esc(x.note)}</td><td><button class="sm del" data-act="measure-del" data-id="${c.id}" data-i="${c.measures.indexOf(x)}">${ic('trash', 14)}</button></td></tr>`).join('') || '<tr><td colspan=6 class="mute">Aún sin registros.</td></tr>'}</table></div></section>`;
   } else if (t === 'carpeta') {
-    body = `<div class="card"><h3>Carpeta de ${esc(c.name)}</h3><p class="mute">Fotos de progreso, análisis, PDFs de laboratorio, consentimientos, etc.</p>
-      <input type="file" id="up" multiple data-client="${c.id}">
-      ${c.files.map((f, i) => `<div class="file"><a href="#" data-act="file-open" data-id="${c.id}" data-i="${i}">${esc(f.name)}</a><span class="mute">${fdate(f.date)} <button class="sm del" data-act="file-del" data-id="${c.id}" data-i="${i}">✕</button></span></div>`).join('') || '<p class="mute">Carpeta vacía.</p>'}</div>
-      <div class="card"><h3>Notas del entrenador</h3><textarea data-notes="${c.id}">${esc(c.notes)}</textarea></div>`;
-  } else {
+    body = `<section class="card"><h3>Carpeta de ${esc(c.name)}</h3><p class="mute">Fotos de progreso, análisis, PDFs de laboratorio, consentimientos, etc. (hasta 25 MB cada uno)</p>
+      <label class="drop">${ic('plus', 18)} Agregar archivos<input type="file" id="up" multiple data-client="${c.id}" hidden></label>
+      ${c.files.map((f, i) => `<div class="file"><a href="#" data-act="file-open" data-id="${c.id}" data-i="${i}">${esc(f.name)}</a><span class="mute">${fdate(f.date)} <button class="sm del" data-act="file-del" data-id="${c.id}" data-i="${i}">${ic('trash', 14)}</button></span></div>`).join('') || '<p class="mute">Carpeta vacía.</p>'}</section>
+      <section class="card"><h3>Notas del entrenador</h3><textarea data-notes="${c.id}">${esc(c.notes)}</textarea></section>`;
+  } else if (t === 'pagos') {
     const ps = S.payments.filter((p) => p.clientId === c.id).sort((a, b) => b.due.localeCompare(a.due));
-    body = `<div class="card"><table><tr><th>Concepto</th><th>Monto</th><th>Vence</th><th>Estado</th></tr>${ps.map((p) => `<tr><td>${esc(p.concept)}</td><td>${money(p.amount)}</td><td>${fdate(p.due)}</td><td>${payTag(p)}</td></tr>`).join('') || '<tr><td colspan=4 class="mute">Sin pagos.</td></tr>'}</table></div>`;
+    body = `<section class="card"><div class="tw"><table><tr><th>Concepto</th><th>Monto</th><th>Vence</th><th>Estado</th></tr>${ps.map((p) => `<tr><td>${esc(p.concept)}</td><td>${money(p.amount)}</td><td>${fdate(p.due)}</td><td>${payTag(p)}</td></tr>`).join('') || '<tr><td colspan=4 class="mute">Sin pagos.</td></tr>'}</table></div></section>`;
+  } else {
+    const pq = c.parq || { a: [], consent: false };
+    body = `<section class="card"><div class="row sp"><h3>Screening resumido de salud (tipo PAR-Q)</h3>${btn('Editar ficha', 'parq-edit', `data-id="${c.id}"`, 'edit', 'sm')}</div>
+      <p class="mute">Versión resumida para orientar; no sustituye el PAR-Q+ oficial ni la valoración médica.</p>
+      ${pq.date ? `<ul class="plain">${PARQ.map((q, i) => `<li>${(pq.a || []).includes(String(i)) ? '<span class="tag bad">Sí</span>' : '<span class="tag ok">No</span>'} ${q}</li>`).join('')}</ul>
+      ${(pq.a || []).length ? `<p class="al bad">${ic('alert', 16)}<span>Hay respuestas "Sí": ${pq.cleared ? 'autorización médica registrada ✓' : 'recomienda autorización médica antes de empezar.'}</span></p>` : '<p class="al info">Sin banderas rojas en el screening.</p>'}
+      <p>Consentimiento informado: ${pq.consent ? `<span class="tag ok">Firmado ${fdate(pq.date)}</span>` : '<span class="tag warn">Pendiente</span>'}</p>` : '<p class="mute">Aún no se ha llenado. Toca "Editar ficha" durante la primera sesión.</p>'}</section>`;
   }
-  return `<div class="bar"><a href="#/clientes">← Clientes</a></div><h1>${esc(c.name)}</h1><p class="sub">${esc(c.goal)}</p>
-  <div class="tabs">${tabs.map(([k, l]) => `<button class="${t === k ? 'on' : ''}" data-act="tab" data-k="cliente" data-v="${k}">${l}</button>`).join('')}</div>${body}`;
+  return `<div class="crumb"><a href="#/clientes">${ic('back', 16)} Clientes</a></div>
+  <section class="chead">${avatar(c.name, 1)}<div><h1>${esc(c.name)}</h1><div class="tags">${trackTag(c.track)}<span class="tag">${c.level}</span>${c.injuries.map((i) => `<span class="tag bad">⚠ ${esc(i)}</span>`).join('')}</div><p class="sub">${esc(c.goal)}</p></div></section>
+  <nav class="tabs">${tabs.map(([k, l]) => `<button class="${t === k ? 'on' : ''}" data-act="tab" data-k="cliente" data-v="${k}">${l}</button>`).join('')}</nav>${body}`;
 };
 
 function spark(vals) {
-  const W = 500, H = 90, mn = Math.min(...vals), mx = Math.max(...vals), r = mx - mn || 1;
-  const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * (W - 20) + 10},${H - 12 - ((v - mn) / r) * (H - 24)}`);
-  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-height:110px"><polyline fill="none" stroke="var(--pri)" stroke-width="3" points="${pts.join(' ')}"/>${pts.map((p) => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="4" fill="var(--pri)"/>`).join('')}</svg>`;
+  const W = 500, H = 100, mn = Math.min(...vals), mx = Math.max(...vals), r = mx - mn || 1;
+  const pts = vals.map((v, i) => [(i / (vals.length - 1)) * (W - 24) + 12, H - 14 - ((v - mn) / r) * (H - 28)]);
+  return `<svg viewBox="0 0 ${W} ${H}" class="spark"><polyline fill="none" stroke="var(--pri)" stroke-width="3" stroke-linejoin="round" points="${pts.map((p) => p.join(',')).join(' ')}"/>${pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="var(--pri)"/>`).join('')}</svg>`;
 }
 
-V.grupos = () => `<h1>Grupos</h1><p class="sub">Arma grupos para clases y sesiones compartidas</p>
-  <div class="bar"><button class="pri" data-act="group-new">+ Nuevo grupo</button></div>
-  <div class="grid">${S.groups.map((g) => `<div class="card"><h3>${esc(g.name)}</h3><p class="mute">${esc(g.notes)}</p>
-    <div>${g.clientIds.map((i) => `<span class="tag">${esc(cl(i)?.name || '?')}</span>`).join('')}</div>
-    <div class="bar"><a class="btn pri sm" href="#/entrenar" data-act="plan-group" data-id="${g.id}">✨ Entrenar</a><button class="sm" data-act="group-edit" data-id="${g.id}">Editar</button><button class="sm del" data-act="group-del" data-id="${g.id}">Eliminar</button></div></div>`).join('') || '<p class="mute">Aún no hay grupos.</p>'}</div>`;
+// ---------- Programa del cliente ----------
+const thumb = (e) => (e?.images?.[0] ? `<img class="th" loading="lazy" src="${e.images[0]}" alt="" onerror="this.remove()">` : `<span class="th ph">${esc((e?.name || '?')[0])}</span>`);
+function routineBlock(r) {
+  const prog = r.program;
+  return `${prog ? `<div class="card prog"><h3>Cómo avanza el programa</h3><div class="weeks">${prog.weeks.map((w) => `<div class="wk"><b>${esc(w.label)}</b><span class="tag">RIR ${esc(w.rir)}</span><small>${esc(w.note)}</small></div>`).join('')}</div>
+      <ul class="plain">${prog.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>
+      ${prog.track === 'fisicoculturismo' ? `<h3>Series por músculo / semana</h3><div class="chips">${Object.entries(prog.volume).map(([k, v]) => `<span class="chip ${v >= 10 && v <= 20 ? 'ok' : ''}">${k} <b>${v}</b></span>`).join('')}</div><small class="mute">Rango práctico: 10–20 series semanales por grupo.</small>` : ''}</div>` : ''}
+    ${r.days.map((d) => `<div class="card"><h3>${esc(d.name)}</h3>${d.items.map((it) => { const e = ex(it.exId); return `<div class="ri" data-act="ex-view" data-id="${it.exId}">${thumb(e)}<div class="ri-b"><b>${esc(e?.name || '?')}</b><small>${esc(e?.muscle || '')} · ${esc(e?.type || '')}</small>${it.note ? `<small class="mute">${esc(it.note)}</small>` : ''}</div><div class="ri-p"><b>${it.sets} × ${esc(it.reps)}</b><small>${esc(it.rest)}</small></div></div>`; }).join('')}</div>`).join('')}`;
+}
+function programTab(c, r) {
+  const dr = ui.draft && ui.draft.clientId === c.id ? ui.draft : null;
+  const dflt = c.track === 'beisbol' ? (c.season === 'temporada' ? 2 : 3) : c.track === 'fisicoculturismo' ? (c.daysPerWeek || 4) : (c.daysPerWeek || 3);
+  const intro = c.track === 'beisbol' ? `Béisbol (${esc(c.position || 'lanzador')} · ${esc(c.season || 'fuera de temporada')}): potencia, pliometría, balón medicinal, fuerza unilateral, isométricos y cuidado del brazo.`
+    : c.track === 'fisicoculturismo' ? `Fisicoculturismo (${esc(c.phase || 'volumen')}): series por músculo en rango 10–20 por semana, RIR 1–3 y semana de descarga.` : 'General: cuerpo completo o torso/pierna con progresión doble y descarga.';
+  return `<section class="card"><h3>Generar programa</h3><p class="mute">${intro} Respeta lesiones, nivel y equipo del cliente. Lo puedes editar después.</p>
+    <div class="gen"><div><label class="fl">Días por semana</label><select id="g-days">${opts([2, 3, 4, 5, 6].map((n) => [n, n + ' días']), dr?.days || dflt)}</select></div>
+    <div><label class="fl">Cardio final</label><select id="g-fin">${opts([['0', 'No'], ['1', 'Sí, al terminar']], dr?.finisher ? '1' : '0')}</select></div></div>
+    <label class="fl">Equipo disponible</label><div class="checks" id="g-equip">${EQUIP.map((e) => `<label><input type="checkbox" value="${e}" ${(dr?.equipment || c.equipment || []).includes(e) ? 'checked' : ''}>${e}</label>`).join('')}</div>
+    <div class="bar">${btn('Generar programa', 'prog-gen', `data-id="${c.id}"`, 'zap', 'pri')}</div></section>
+    ${dr ? `<section class="card draft"><div class="row sp"><h3>Vista previa · ${esc(dr.routine.name)}</h3><div class="bar" style="margin:0">${btn('Guardar y asignar', 'prog-save', `data-id="${c.id}"`, 'check', 'pri')}${btn('Descartar', 'prog-drop')}</div></div></section>${routineBlock(dr.routine)}`
+    : r ? `<div class="row sp"><h2>Programa actual: ${esc(r.name)}</h2><div class="bar" style="margin:0"><a class="btn sm" href="#/rutina/${r.id}">${ic('edit', 14)}Editar</a>${btn('Copiar', 'copy-routine', `data-id="${r.id}"`, 'copy', 'sm')}</div></div>${routineBlock(r)}` : '<p class="mute">Este cliente aún no tiene programa. Genera uno arriba.</p>'}`;
+}
 
-const apptIds = (a) => (a.groupId ? S.groups.find((g) => g.id === a.groupId)?.clientIds || [] : a.clientIds || []);
-const apptWho = (a) => (a.groupId ? S.groups.find((g) => g.id === a.groupId)?.name || 'Grupo' : (a.clientIds || []).map((i) => cl(i)?.name).filter(Boolean).join(', ') || '—');
-const apptSort = (a, b) => (a.date + a.time).localeCompare(b.date + b.time);
+// ---------- Nutrición del cliente ----------
+function nutritionTab(c, d) {
+  const n = ui.nut && ui.nut.clientId === c.id ? ui.nut : { goal: c.track === 'fisicoculturismo' && c.phase === 'definición' ? 'perder' : c.track === 'fisicoculturismo' ? 'ganar' : 'mantener', rate: '', meals: 5 };
+  const res = ui.nut && ui.nut.clientId === c.id ? ui.nut.result : null;
+  const macroBar = (r) => { const k = r.p * 4 + r.c * 4 + r.f * 9; return `<div class="mbar"><i class="p" style="width:${(r.p * 4 / k) * 100}%">P ${r.p} g</i><i class="c" style="width:${(r.c * 4 / k) * 100}%">C ${r.c} g</i><i class="f" style="width:${(r.f * 9 / k) * 100}%">G ${r.f} g</i></div>`; };
+  return `<section class="card"><h3>Calculadora y menú</h3><p class="mute">Orientación alimenticia basada en peso, estatura, edad, actividad y tipo de entrenamiento. Es una guía: el coach decide y ajusta.</p>
+    <div class="gen3"><div><label class="fl">Objetivo</label><select id="n-goal">${opts([['perder', 'Perder grasa'], ['mantener', 'Mantener'], ['ganar', 'Ganar masa']], n.goal)}</select></div>
+    <div><label class="fl">Ritmo de pérdida (por semana)</label><select id="n-rate">${opts([['', 'Automático'], ['0.5', '0.5% del peso'], ['0.7', '0.7% del peso'], ['1', '1% del peso']], n.rate)}</select></div>
+    <div><label class="fl">Comidas al día</label><select id="n-meals">${opts([[3, '3 comidas'], [4, '4 comidas'], [5, '5 comidas']], n.meals)}</select></div></div>
+    <div class="bar">${btn('Calcular y armar menú', 'nut-calc', `data-id="${c.id}"`, 'leaf', 'pri')}${btn('Editar datos del cliente', 'client-edit', `data-id="${c.id}"`, 'edit')}</div></section>
+    ${res && res.error ? `<p class="al bad">${ic('alert', 16)}<span>${esc(res.error)}</span></p>` : ''}
+    ${res && !res.error ? `<section class="card"><div class="row sp"><h3>Metas diarias</h3><div class="bar" style="margin:0">${btn('Guardar como dieta y asignar', 'nut-save', `data-id="${c.id}"`, 'check', 'pri')}</div></div>
+      <div class="kpis small"><div class="kpi"><b>${res.kcal}</b><small>kcal</small></div><div class="kpi"><b>${res.p} g</b><small>proteína</small></div><div class="kpi"><b>${res.c} g</b><small>carbohidratos</small></div><div class="kpi"><b>${res.f} g</b><small>grasa</small></div></div>
+      ${macroBar(res)}<p class="mute">Metabolismo basal ${res.bmr} kcal · gasto total estimado ${res.tdee} kcal (peso ${res.weight} kg${res.lbm ? `, masa libre ${res.lbm.toFixed(1)} kg` : ''}).</p>
+      ${res.warnings.map((w) => `<p class="al bad">${ic('alert', 16)}<span>${esc(w)}</span></p>`).join('')}<ul class="plain">${res.notes.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></section>
+      ${ui.nut.menu.map((day) => `<section class="card"><h3>Menú ${esc(day.name)}</h3>${day.meals.map((m) => `<div class="meal"><div class="mt"><b>${esc(m.name)}</b><small>${esc(m.time)}</small></div><div>${esc(m.food)}</div></div>`).join('')}</section>`).join('')}
+      <section class="card"><h3>Recomendaciones</h3><ul class="plain">${ui.nut.tips.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></section>` : ''}
+    ${d ? `<section class="card"><h3>Dieta asignada: <a href="#/dieta/${d.id}">${esc(d.name)}</a></h3><p>${d.kcal} kcal · P ${d.protein} g · C ${d.carbs} g · G ${d.fat} g</p>${btn('Copiar para WhatsApp', 'copy-diet', `data-id="${d.id}"`, 'copy', 'sm')}</section>` : ''}`;
+}
+
+V.grupos = () => page('Grupos', 'Arma grupos para clases y sesiones compartidas', btn('Nuevo grupo', 'group-new', '', 'plus', 'pri'),
+  `<div class="grid">${S.groups.map((g) => `<div class="card"><h3>${esc(g.name)}</h3><p class="mute">${esc(g.notes)}</p>
+    <div class="tags">${g.clientIds.map((i) => `<span class="tag">${esc(cl(i)?.name || '?')}</span>`).join('')}</div>
+    <div class="bar">${btn('Entrenar', 'plan-group', `data-id="${g.id}"`, 'zap', 'pri sm')}${btn('Editar', 'group-edit', `data-id="${g.id}"`, 'edit', 'sm')}${btn('', 'group-del', `data-id="${g.id}"`, 'trash', 'sm del')}</div></div>`).join('') || '<p class="mute">Aún no hay grupos.</p>'}</div>`);
+
 const apptFields = () => [
   { k: 'date', l: 'Fecha', t: 'date', req: 1 }, { k: 'time', l: 'Hora', t: 'time', req: 1 }, { k: 'duration', l: 'Duración (min)', t: 'number' },
   { k: 'type', l: 'Tipo', t: 'select', o: [['individual', 'Individual'], ['grupal', 'Grupal']] },
@@ -175,141 +312,176 @@ const apptFields = () => [
   { k: 'status', l: 'Estado', t: 'select', o: [['programada', 'Programada'], ['realizada', 'Realizada'], ['cancelada', 'Cancelada'], ['no vino', 'No asistió']] },
   { k: 'notes', l: 'Notas', t: 'textarea' },
 ];
-
 V.agenda = () => {
   const f = tab.agenda || 'proximas', t = today();
   let list = [...S.appointments].sort(apptSort);
-  if (f === 'proximas') list = list.filter((a) => a.date >= t);
-  else if (f === 'pasadas') list = list.filter((a) => a.date < t).reverse();
+  if (f === 'proximas') list = list.filter((a) => a.date >= t); else if (f === 'pasadas') list = list.filter((a) => a.date < t).reverse();
   const byDay = {}; list.forEach((a) => (byDay[a.date] ||= []).push(a));
-  const tag = (s) => `<span class="tag ${s === 'realizada' ? 'ok' : s === 'programada' ? '' : 'bad'}">${s}</span>`;
-  return `<h1>Agenda</h1><p class="sub">Citas de entrenamiento individuales y grupales</p>
-  <div class="bar"><button class="pri" data-act="appt-new">+ Nueva cita</button><span class="grow"></span>${[['proximas', 'Próximas'], ['pasadas', 'Pasadas'], ['todas', 'Todas']].map(([k, l]) => `<button class="sm ${f === k ? 'pri' : ''}" data-act="tab" data-k="agenda" data-v="${k}">${l}</button>`).join('')}</div>
-  ${Object.entries(byDay).map(([d, as]) => `<div class="card"><h3>${fdate(d)}${d === t ? ' · Hoy' : ''}</h3>${as.map((a) => `<div class="row sp" style="padding:6px 0;border-top:1px solid var(--line)"><span><b>${a.time}</b> · ${a.duration || 60} min · ${esc(apptWho(a))} <span class="tag">${a.type}</span> ${tag(a.status)}<br><span class="mute">${esc(a.notes)}</span></span><span><button class="sm" data-act="appt-edit" data-id="${a.id}">Editar</button> <button class="sm del" data-act="appt-del" data-id="${a.id}">✕</button></span></div>`).join('')}</div>`).join('') || '<p class="mute">Sin citas en esta vista.</p>'}`;
+  const tg = (s) => `<span class="tag ${s === 'realizada' ? 'ok' : s === 'programada' ? '' : 'bad'}">${s}</span>`;
+  return page('Agenda', 'Citas individuales y grupales', btn('Nueva cita', 'appt-new', '', 'plus', 'pri'),
+    `<div class="bar"><div class="seg">${[['proximas', 'Próximas'], ['pasadas', 'Pasadas'], ['todas', 'Todas']].map(([k, l]) => `<button class="${f === k ? 'on' : ''}" data-act="tab" data-k="agenda" data-v="${k}">${l}</button>`).join('')}</div></div>
+    ${Object.entries(byDay).map(([d, as]) => `<section class="card"><h3>${fdate(d)}${d === t ? ' · Hoy' : ''}</h3>${as.map((a) => {
+      const who = apptIds(a).map((i) => cl(i)).filter(Boolean);
+      const wa = who.length === 1 && who[0].phone ? `<a class="btn sm" target="_blank" title="Recordatorio" href="https://wa.me/${who[0].phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola ${who[0].name.split(' ')[0]}, te recuerdo tu sesión ${fdate(a.date)} a las ${a.time}. ¡Nos vemos! 💪`)}">${ic('chat', 14)}</a>` : '';
+      return `<div class="li ap"><b>${a.time}</b><span>${a.duration || 60} min · ${esc(apptWho(a))} <span class="tag">${a.type}</span> ${tg(a.status)}<br><span class="mute">${esc(a.notes)}</span></span><span class="acts">${a.status === 'programada' ? wa : ''}${btn('', 'appt-edit', `data-id="${a.id}"`, 'edit', 'sm')}${btn('', 'appt-del', `data-id="${a.id}"`, 'trash', 'sm del')}</span></div>`;
+    }).join('')}</section>`).join('') || '<p class="mute">Sin citas en esta vista.</p>'}`);
 };
 
-V.rutinas = () => {
-  const t = tab.rutinas || 'plantillas';
-  let body;
-  if (t === 'plantillas') {
-    body = `<div class="bar"><button class="pri" data-act="routine-new">+ Nueva rutina</button></div><div class="grid">${S.routines.map((r) => `<div class="card"><h3>${esc(r.name)}</h3><p class="mute">${esc(r.goal)} · ${r.days.length} días · ${r.days.reduce((a, d) => a + d.items.length, 0)} ejercicios</p>
-      <p class="mute">Asignada a: ${S.clients.filter((c) => c.routineId === r.id).map((c) => esc(c.name)).join(', ') || 'nadie'}</p>
-      <div class="bar"><a class="btn sm pri" href="#/rutina/${r.id}">Abrir / editar</a><button class="sm" data-act="copy-routine" data-id="${r.id}">Copiar</button><button class="sm del" data-act="routine-del" data-id="${r.id}">✕</button></div></div>`).join('')}</div>`;
-  } else {
-    const p = ui.pat || '';
-    const list = S.exercises.filter((e) => !p || e.pattern === p);
-    body = `<div class="bar"><button class="pri" data-act="ex-new">+ Nuevo ejercicio</button><select id="pat" style="max-width:200px"><option value="">Todos los patrones</option>${PATTERNS.map((x) => `<option ${x === p ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
-      <div class="card"><table><tr><th>Ejercicio</th><th>Patrón</th><th>Nivel</th><th>Cuidado con</th><th></th></tr>${list.map((e) => `<tr><td><b>${esc(e.name)}</b><br><span class="mute">${esc(e.muscle)}</span></td><td>${e.pattern}</td><td>${e.level}</td><td>${e.avoid.map((a) => `<span class="tag bad">${esc(a)}</span>`).join('')}</td><td style="white-space:nowrap"><button class="sm" data-act="ex-view" data-id="${e.id}">Ver ejemplo</button> <button class="sm" data-act="ex-edit" data-id="${e.id}">✎</button></td></tr>`).join('')}</table></div>`;
-  }
-  return `<h1>Rutinas y ejercicios</h1><p class="sub">Biblioteca con ejemplos y plantillas para asignar a clientes</p>
-  <div class="tabs">${[['plantillas', 'Plantillas de rutina'], ['biblioteca', 'Biblioteca de ejercicios']].map(([k, l]) => `<button class="${t === k ? 'on' : ''}" data-act="tab" data-k="rutinas" data-v="${k}">${l}</button>`).join('')}</div>${body}`;
-};
+// ---------- Entrenamientos (rutinas) ----------
+V.entrenamientos = () => page('Entrenamientos', 'Plantillas y programas para tus clientes', btn('Nueva rutina', 'routine-new', '', 'plus', 'pri'),
+  `<p class="mute">Para generar un programa completo por tipo de persona (béisbol, fisicoculturismo, general) entra al cliente → pestaña <b>Programa</b>.</p>
+  <div class="grid">${S.routines.map((r) => `<div class="card"><div class="row sp"><h3>${esc(r.name)}</h3>${r.program ? trackTag(r.program.track) : ''}</div><p class="mute">${esc(r.goal)} · ${r.days.length} días · ${r.days.reduce((a, d) => a + d.items.length, 0)} ejercicios</p>
+    <div class="thumbs">${r.days.flatMap((d) => d.items).slice(0, 5).map((i) => thumb(ex(i.exId))).join('')}</div>
+    <p class="mini">Asignada a: ${S.clients.filter((c) => c.routineId === r.id).map((c) => esc(c.name)).join(', ') || 'nadie'}</p>
+    <div class="bar"><a class="btn sm pri" href="#/rutina/${r.id}">Abrir / editar</a>${btn('Copiar', 'copy-routine', `data-id="${r.id}"`, 'copy', 'sm')}${btn('', 'routine-del', `data-id="${r.id}"`, 'trash', 'sm del')}</div></div>`).join('') || '<p class="mute">Aún no hay rutinas.</p>'}</div>`);
 
 V.rutina = (id) => {
   const r = S.routines.find((x) => x.id === id); if (!r) return '<p>No encontrada.</p>';
-  const exo = (sel) => `<option value="">— elegir —</option>` + PATTERNS.map((p) => `<optgroup label="${p}">${S.exercises.filter((e) => e.pattern === p).map((e) => `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${esc(e.name)} (${e.level})</option>`).join('')}</optgroup>`).join('');
-  return `<div class="bar"><a href="#/rutinas">← Rutinas</a></div><div data-root="routines:${r.id}">
-  <div class="two"><div><label>Nombre</label><input data-path="name" value="${esc(r.name)}"></div><div><label>Objetivo</label><input data-path="goal" value="${esc(r.goal)}"></div></div>
-  ${r.days.map((d, di) => `<div class="card"><div class="row sp"><input data-path="days.${di}.name" value="${esc(d.name)}" style="max-width:240px;font-weight:600"><button class="sm del" data-act="rday-del" data-id="${r.id}" data-d="${di}">Quitar día</button></div>
-    <div class="edit-row mute" style="margin-top:8px"><span>Ejercicio</span><span>Series</span><span>Reps</span><span>Descanso</span><span>Nota</span><span></span></div>
-    ${d.items.map((it, ii) => `<div class="edit-row"><select data-path="days.${di}.items.${ii}.exId">${exo(it.exId)}</select><input type="number" data-path="days.${di}.items.${ii}.sets" value="${it.sets}"><input data-path="days.${di}.items.${ii}.reps" value="${esc(it.reps)}"><input data-path="days.${di}.items.${ii}.rest" value="${esc(it.rest)}"><input data-path="days.${di}.items.${ii}.note" value="${esc(it.note)}"><span style="white-space:nowrap"><button class="sm" title="Ver ejemplo" data-act="ex-view" data-id="${it.exId}">👁</button><button class="sm del" data-act="ritem-del" data-id="${r.id}" data-d="${di}" data-i="${ii}">✕</button></span></div>`).join('')}
+  const exo = (sel) => `<option value="">— elegir —</option>` + PATTERNS.map((p) => { const l = S.exercises.filter((e) => e.pattern === p); return l.length ? `<optgroup label="${p}">${l.map((e) => `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${esc(e.name)} (${e.level})</option>`).join('')}</optgroup>` : ''; }).join('');
+  return `<div class="crumb"><a href="#/entrenamientos">${ic('back', 16)} Entrenamientos</a></div><div data-root="routines:${r.id}">
+  <div class="two"><div><label class="fl">Nombre</label><input data-path="name" value="${esc(r.name)}"></div><div><label class="fl">Objetivo</label><input data-path="goal" value="${esc(r.goal)}"></div></div>
+  ${r.program ? `<div class="card prog"><h3>Progresión</h3><div class="weeks">${r.program.weeks.map((w) => `<div class="wk"><b>${esc(w.label)}</b><span class="tag">RIR ${esc(w.rir)}</span><small>${esc(w.note)}</small></div>`).join('')}</div><ul class="plain">${r.program.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>` : ''}
+  ${r.days.map((d, di) => `<div class="card"><div class="row sp"><input data-path="days.${di}.name" value="${esc(d.name)}" class="title-in"><button class="sm del" data-act="rday-del" data-id="${r.id}" data-d="${di}">Quitar día</button></div>
+    <div class="edit-row mute head"><span>Ejercicio</span><span>Series</span><span>Reps</span><span>Descanso</span><span>Nota</span><span></span></div>
+    ${d.items.map((it, ii) => `<div class="edit-row"><div class="exsel">${thumb(ex(it.exId))}<select data-path="days.${di}.items.${ii}.exId">${exo(it.exId)}</select></div><input type="number" data-path="days.${di}.items.${ii}.sets" value="${it.sets}"><input data-path="days.${di}.items.${ii}.reps" value="${esc(it.reps)}"><input data-path="days.${di}.items.${ii}.rest" value="${esc(it.rest)}"><input data-path="days.${di}.items.${ii}.note" value="${esc(it.note)}"><span class="acts"><button class="sm" data-act="ex-view" data-id="${it.exId}" title="Ver ejemplo">${ic('eye', 14)}</button><button class="sm del" data-act="ritem-del" data-id="${r.id}" data-d="${di}" data-i="${ii}">${ic('trash', 14)}</button></span></div>`).join('')}
     <button class="sm" data-act="ritem-add" data-id="${r.id}" data-d="${di}">+ Ejercicio</button></div>`).join('')}
-  <div class="bar"><button data-act="rday-add" data-id="${r.id}">+ Agregar día</button><button data-act="copy-routine" data-id="${r.id}">Copiar para WhatsApp</button><button onclick="print()">Imprimir</button></div></div>`;
+  <div class="bar">${btn('Agregar día', 'rday-add', `data-id="${r.id}"`, 'plus')}${btn('Copiar para WhatsApp', 'copy-routine', `data-id="${r.id}"`, 'copy')}<button onclick="print()">${ic('print', 16)}Imprimir</button></div></div>`;
 };
 
-V.dietas = () => `<h1>Dietas</h1><p class="sub">Menús con macros que puedes asignar a tus clientes</p>
-  <div class="bar"><button class="pri" data-act="diet-new">+ Nueva dieta</button></div>
-  <div class="grid">${S.diets.map((d) => `<div class="card"><h3>${esc(d.name)}</h3><p>${d.kcal} kcal · P ${d.protein}g · C ${d.carbs}g · G ${d.fat}g</p>
-    <p class="mute">Asignada a: ${S.clients.filter((c) => c.dietId === d.id).map((c) => esc(c.name)).join(', ') || 'nadie'}</p>
-    <div class="bar"><a class="btn sm pri" href="#/dieta/${d.id}">Abrir / editar</a><button class="sm" data-act="copy-diet" data-id="${d.id}">Copiar</button><button class="sm del" data-act="diet-del" data-id="${d.id}">✕</button></div></div>`).join('')}</div>`;
+// ---------- Biblioteca ----------
+V.biblioteca = () => {
+  const f = ui.lib;
+  const q = f.q.toLowerCase();
+  const list = S.exercises.filter((e) => (!q || e.name.toLowerCase().includes(q) || e.muscle.includes(q)) && (!f.pattern || e.pattern === f.pattern) && (!f.grp || e.muscle === f.grp) && (!f.type || e.type === f.type) && (!f.level || e.level === f.level) && (!f.tag || (e.tags || []).includes(f.tag)));
+  const sel = (id, label, arr, v) => `<select id="${id}"><option value="">${label}</option>${arr.map((x) => `<option ${x === v ? 'selected' : ''}>${x}</option>`).join('')}</select>`;
+  return page('Biblioteca de ejercicios', `${S.exercises.length} ejercicios con ejemplo y variantes`, btn('Nuevo ejercicio', 'ex-new', '', 'plus', 'pri'),
+    `<div class="bar filters"><div class="search">${ic('search', 16)}<input id="lq" placeholder="Buscar ejercicio o músculo…" value="${esc(f.q)}"></div>
+      ${sel('lpat', 'Patrón', PATTERNS, f.pattern)}${sel('lgrp', 'Músculo', GROUPS, f.grp)}${sel('ltype', 'Tipo', TYPES, f.type)}${sel('llvl', 'Nivel', LEVELS.map((x) => x[0]), f.level)}
+      <select id="ltag"><option value="">Todos los perfiles</option>${opts([['beisbol', 'Béisbol'], ['hipertrofia', 'Hipertrofia'], ['general', 'General']], f.tag)}</select></div>
+    <p class="mini">${list.length} resultados</p>
+    <div class="exgrid">${list.map((e) => `<div class="ex" data-act="ex-view" data-id="${e.id}"><div class="eximg">${e.images?.[0] ? `<img loading="lazy" src="${e.images[0]}" alt="" onerror="this.remove()">${e.images[1] ? `<img class="alt" loading="lazy" src="${e.images[1]}" alt="" onerror="this.remove()">` : ''}` : `<span class="noimg">${ic('zap', 28)}</span>`}</div>
+      <div class="exb"><b>${esc(e.name)}</b><div class="tags"><span class="tag">${esc(e.muscle)}</span><span class="tag">${esc(e.type)}</span><span class="tag lv-${e.level}">${e.level}</span></div></div></div>`).join('')}</div>`);
+};
+
+// ---------- Nutrición (dietas) ----------
+V.nutricion = () => page('Nutrición', 'Dietas y menús para tus clientes', btn('Nueva dieta', 'diet-new', '', 'plus', 'pri'),
+  `<p class="mute">Para calcular metas y generar un menú automático entra al cliente → pestaña <b>Nutrición</b>.</p>
+  <div class="grid">${S.diets.map((d) => `<div class="card"><h3>${esc(d.name)}</h3><p><b>${d.kcal}</b> kcal · P ${d.protein} g · C ${d.carbs} g · G ${d.fat} g</p>
+    <p class="mini">Asignada a: ${S.clients.filter((c) => c.dietId === d.id).map((c) => esc(c.name)).join(', ') || 'nadie'}</p>
+    <div class="bar"><a class="btn sm pri" href="#/dieta/${d.id}">Abrir / editar</a>${btn('Copiar', 'copy-diet', `data-id="${d.id}"`, 'copy', 'sm')}${btn('', 'diet-del', `data-id="${d.id}"`, 'trash', 'sm del')}</div></div>`).join('') || '<p class="mute">Aún no hay dietas.</p>'}</div>`);
 
 V.dieta = (id) => {
   const d = S.diets.find((x) => x.id === id); if (!d) return '<p>No encontrada.</p>';
   const kc = d.protein * 4 + d.carbs * 4 + d.fat * 9;
-  return `<div class="bar"><a href="#/dietas">← Dietas</a></div><div data-root="diets:${d.id}">
-  <label>Nombre</label><input data-path="name" value="${esc(d.name)}">
-  <div class="three" style="grid-template-columns:repeat(4,1fr)">${[['kcal', 'Kcal'], ['protein', 'Proteína g'], ['carbs', 'Carbs g'], ['fat', 'Grasa g']].map(([k, l]) => `<div><label>${l}</label><input type="number" data-path="${k}" value="${d[k]}"></div>`).join('')}</div>
+  return `<div class="crumb"><a href="#/nutricion">${ic('back', 16)} Nutrición</a></div><div data-root="diets:${d.id}">
+  <label class="fl">Nombre</label><input data-path="name" value="${esc(d.name)}">
+  <div class="four">${[['kcal', 'Kcal'], ['protein', 'Proteína g'], ['carbs', 'Carbs g'], ['fat', 'Grasa g']].map(([k, l]) => `<div><label class="fl">${l}</label><input type="number" data-path="${k}" data-re="1" value="${d[k]}"></div>`).join('')}</div>
   <p class="mute">Los macros suman ≈ ${kc} kcal (meta ${d.kcal}).</p>
-  <label>Notas / indicaciones</label><textarea data-path="notes">${esc(d.notes)}</textarea>
-  ${d.days.map((day, di) => `<div class="card"><div class="row sp"><input data-path="days.${di}.name" value="${esc(day.name)}" style="max-width:260px;font-weight:600"><button class="sm del" data-act="dday-del" data-id="${d.id}" data-d="${di}">Quitar día</button></div>
-    ${day.meals.map((m, mi) => `<div class="meal-row" style="margin-top:6px"><input data-path="days.${di}.meals.${mi}.name" value="${esc(m.name)}"><input data-path="days.${di}.meals.${mi}.time" value="${esc(m.time)}"><input data-path="days.${di}.meals.${mi}.food" value="${esc(m.food)}"><button class="sm del" data-act="meal-del" data-id="${d.id}" data-d="${di}" data-i="${mi}">✕</button></div>`).join('')}
+  <label class="fl">Notas / indicaciones</label><textarea data-path="notes">${esc(d.notes)}</textarea>
+  ${d.days.map((day, di) => `<div class="card"><div class="row sp"><input data-path="days.${di}.name" value="${esc(day.name)}" class="title-in"><button class="sm del" data-act="dday-del" data-id="${d.id}" data-d="${di}">Quitar día</button></div>
+    ${day.meals.map((m, mi) => `<div class="meal-row"><input data-path="days.${di}.meals.${mi}.name" value="${esc(m.name)}"><input data-path="days.${di}.meals.${mi}.time" value="${esc(m.time)}"><input data-path="days.${di}.meals.${mi}.food" value="${esc(m.food)}"><button class="sm del" data-act="meal-del" data-id="${d.id}" data-d="${di}" data-i="${mi}">${ic('trash', 14)}</button></div>`).join('')}
     <button class="sm" data-act="meal-add" data-id="${d.id}" data-d="${di}">+ Comida</button></div>`).join('')}
-  <div class="bar"><button data-act="dday-add" data-id="${d.id}">+ Agregar día de menú</button><button data-act="copy-diet" data-id="${d.id}">Copiar para WhatsApp</button><button onclick="print()">Imprimir</button></div></div>`;
+  <div class="bar">${btn('Agregar día de menú', 'dday-add', `data-id="${d.id}"`, 'plus')}${btn('Copiar para WhatsApp', 'copy-diet', `data-id="${d.id}"`, 'copy')}<button onclick="print()">${ic('print', 16)}Imprimir</button></div></div>`;
 };
 
-const payTag = (p) => (p.status === 'pagado' ? `<span class="tag ok">Pagado ${fdate(p.paidOn)}</span>` : p.due < today() ? '<span class="tag bad">Vencido</span>' : '<span class="tag warn">Pendiente</span>');
-
+// ---------- Pagos ----------
 V.pagos = () => {
   const t = today(), month = t.slice(0, 7);
-  const paid = S.payments.filter((p) => p.status === 'pagado' && p.paidOn.startsWith(month)).reduce((a, p) => a + p.amount, 0);
+  const paid = S.payments.filter((p) => p.status === 'pagado' && (p.paidOn || '').startsWith(month)).reduce((a, p) => a + p.amount, 0);
   const pend = S.payments.filter((p) => p.status !== 'pagado');
   const ps = [...S.payments].sort((a, b) => (a.status === b.status ? b.due.localeCompare(a.due) : a.status === 'pagado' ? 1 : -1));
-  return `<h1>Pagos</h1><p class="sub">Cobros, vencimientos y recordatorios</p>
-  <div class="grid"><div class="card stat">${money(paid)}<small>Cobrado este mes</small></div><div class="card stat">${money(pend.reduce((a, p) => a + p.amount, 0))}<small>Por cobrar</small></div><div class="card stat" style="color:var(--bad)">${money(pend.filter((p) => p.due < t).reduce((a, p) => a + p.amount, 0))}<small>Vencido</small></div></div>
-  <div class="bar"><button class="pri" data-act="pay-new">+ Registrar cobro</button><button data-act="pay-month">Generar cobros del mes</button><button data-act="plan-edit">Planes y precios</button></div>
-  <div class="card"><table><tr><th>Cliente</th><th>Concepto</th><th>Monto</th><th>Vence</th><th>Estado</th><th></th></tr>${ps.map((p) => {
-    const c = cl(p.clientId);
-    return `<tr><td>${esc(c?.name || '?')}</td><td>${esc(p.concept)}</td><td>${money(p.amount)}</td><td>${fdate(p.due)}</td><td>${payTag(p)}</td><td style="white-space:nowrap">${p.status !== 'pagado' ? `<button class="sm pri" data-act="pay-done" data-id="${p.id}">Marcar pagado</button> ${c?.phone ? `<button class="sm" data-act="pay-remind" data-id="${p.id}">Recordar</button>` : ''}` : ''} <button class="sm del" data-act="pay-del" data-id="${p.id}">✕</button></td></tr>`;
-  }).join('') || '<tr><td colspan=6 class="mute">Sin pagos registrados.</td></tr>'}</table></div>`;
+  return page('Pagos', 'Cobros, vencimientos y recordatorios', `${btn('Generar cobros del mes', 'pay-month')}${btn('Planes y precios', 'plan-edit')}${btn('Registrar cobro', 'pay-new', '', 'plus', 'pri')}`,
+    `<div class="kpis three"><div class="kpi"><span class="k-ic g">${ic('dollar')}</span><b>${money(paid)}</b><small>Cobrado este mes</small></div><div class="kpi"><span class="k-ic w">${ic('clip')}</span><b>${money(pend.reduce((a, p) => a + p.amount, 0))}</b><small>Por cobrar</small></div><div class="kpi"><span class="k-ic r">${ic('alert')}</span><b>${money(pend.filter((p) => p.due < t).reduce((a, p) => a + p.amount, 0))}</b><small>Vencido</small></div></div>
+    <section class="card"><div class="tw"><table><tr><th>Cliente</th><th>Concepto</th><th>Monto</th><th>Vence</th><th>Estado</th><th></th></tr>${ps.map((p) => {
+      const c = cl(p.clientId);
+      return `<tr><td>${esc(c?.name || '?')}</td><td>${esc(p.concept)}</td><td>${money(p.amount)}</td><td>${fdate(p.due)}</td><td>${payTag(p)}</td><td class="nw">${p.status !== 'pagado' ? `${btn('Pagado', 'pay-done', `data-id="${p.id}"`, 'check', 'sm pri')}${c?.phone ? btn('', 'pay-remind', `data-id="${p.id}"`, 'chat', 'sm') : ''}` : ''}${btn('', 'pay-del', `data-id="${p.id}"`, 'trash', 'sm del')}</td></tr>`;
+    }).join('') || '<tr><td colspan=6 class="mute">Sin pagos registrados.</td></tr>'}</table></div></section>`);
 };
 
+// ---------- Entrenar en grupo ----------
 V.entrenar = () => {
   const p = ui.plan;
-  return `<h1>✨ Entrenar en grupo</h1><p class="sub">La IA revisa el perfil, nivel y lesiones de cada cliente y arma un circuito donde todos participan al mismo tiempo, con ejercicios y tiempos personalizados.</p>
-  <div class="card"><div class="row sp"><h3>1. ¿Quiénes entrenan?</h3><span>${S.groups.map((g) => `<button class="sm" data-act="plan-group" data-id="${g.id}">${esc(g.name)}</button>`).join(' ')}</span></div>
-    <div class="checks" id="pl-clients">${S.clients.filter((c) => c.active).map((c) => `<label><input type="checkbox" value="${c.id}" ${p.clientIds.includes(c.id) ? 'checked' : ''}>${esc(c.name)} <span class="mute">· ${c.level}${c.injuries.length ? ' · ⚠ ' + esc(c.injuries.join('/')) : ''}</span></label>`).join('')}</div></div>
-  <div class="card"><h3>2. Sesión</h3><div class="three">
-    <div><label>Duración (min)</label><input type="number" id="pl-min" value="${p.minutes}" min="20" max="120"></div>
-    <div><label>Enfoque</label><select id="pl-focus">${opts([['completo', 'Cuerpo completo'], ['superior', 'Tren superior'], ['inferior', 'Tren inferior'], ['cardio', 'Cardio / metabólico']], p.focus)}</select></div>
-    <div><label>Usar IA (Claude)</label><select id="pl-ai">${opts([['1', 'Sí, con IA'], ['0', 'Solo reglas del sistema']], p.useAI ? '1' : '0')}</select></div></div>
-    <label>Equipo disponible (peso corporal siempre)</label><div class="checks" id="pl-equip">${EQUIP.map((e) => `<label><input type="checkbox" value="${e}" ${p.equipment.includes(e) ? 'checked' : ''}>${e}</label>`).join('')}</div></div>
-  <div class="bar"><button class="pri" data-act="gen" ${ui.busy ? 'disabled' : ''}>${ui.busy ? 'Generando…' : '✨ Generar sesión grupal'}</button></div>
-  ${ui.result ? renderPlan(ui.result) : ''}`;
+  return page('✨ Entrenar en grupo', 'Un circuito donde todos participan al mismo tiempo, adaptado a nivel, lesiones y perfil de cada cliente.', '',
+    `<section class="card"><div class="row sp"><h3>1. ¿Quiénes entrenan?</h3><span class="tags">${S.groups.map((g) => `<button class="sm" data-act="plan-group" data-id="${g.id}">${esc(g.name)}</button>`).join(' ')}</span></div>
+    <div class="checks big" id="pl-clients">${S.clients.filter((c) => c.active).map((c) => `<label><input type="checkbox" value="${c.id}" ${p.clientIds.includes(c.id) ? 'checked' : ''}>${esc(c.name)} <span class="mute">· ${c.level}${c.injuries.length ? ' · ⚠ ' + esc(c.injuries.join('/')) : ''}</span></label>`).join('')}</div></section>
+    <section class="card"><h3>2. Sesión</h3><div class="three">
+      <div><label class="fl">Duración (min)</label><input type="number" id="pl-min" value="${p.minutes}" min="20" max="120"></div>
+      <div><label class="fl">Enfoque</label><select id="pl-focus">${opts([['completo', 'Cuerpo completo'], ['superior', 'Tren superior'], ['inferior', 'Tren inferior'], ['cardio', 'Cardio / metabólico'], ['beisbol', 'Béisbol: explosividad y rotación']], p.focus)}</select></div>
+      <div><label class="fl">Usar IA (Claude)</label><select id="pl-ai">${opts([['1', 'Sí, con IA'], ['0', 'Solo reglas del sistema']], p.useAI ? '1' : '0')}</select></div></div>
+      <label class="fl">Equipo disponible (peso corporal siempre)</label><div class="checks" id="pl-equip">${EQUIP.map((e) => `<label><input type="checkbox" value="${e}" ${p.equipment.includes(e) ? 'checked' : ''}>${e}</label>`).join('')}</div></section>
+    <div class="bar">${btn(ui.busy ? 'Generando…' : 'Generar sesión grupal', 'gen', ui.busy ? 'disabled' : '', 'zap', 'pri lg')}</div>
+    ${ui.result ? renderPlan(ui.result) : ''}`);
 };
-
 function renderPlan(r) {
   const maxA = Math.max(...r.perClient.map((c) => c.attentionMin));
   const rot = {}; (r.rotation || []).forEach((x) => ((rot[x.round] ||= {})[x.station] = x.clientId));
   const nm = (id) => (r.perClient.find((c) => c.clientId === id)?.name || '').split(' ')[0];
-  return `<div class="card ai-out"><div class="row sp"><h2 style="margin:0">${esc(r.title)}</h2><span class="tag">${r.source === 'ia' ? '🤖 Generado con IA' : '⚙ Reglas del sistema'}</span></div>
+  return `<section class="card ai-out"><div class="row sp"><h2>${esc(r.title)}</h2><span class="tag">${r.source === 'ia' ? '🤖 Generado con IA' : '⚙ Reglas del sistema'}</span></div>
   ${r.aiError ? `<p class="mute">La IA no respondió (${esc(r.aiError)}); se usó el sistema de reglas.</p>` : ''}
   <p class="mute">${r.totalMinutes} min · ${r.rounds} rondas · ${r.stations.length} estaciones · ${r.slotSeconds} s por estación (todos rotan juntos)</p>
   <h3>Calentamiento</h3><ul>${r.warmup.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-  <h3>Circuito personalizado</h3>
-  <table><tr><th>Cliente</th><th>Trabajo / descanso</th>${r.stations.map((s) => `<th>Est. ${s.n}<br><span style="text-transform:none">${esc(s.name)}</span></th>`).join('')}</tr>
-  ${r.perClient.map((c) => `<tr><td><b>${esc(c.name)}</b><br><span class="tag">${c.level}</span>${(c.injuries || []).map((i) => `<span class="tag bad">⚠ ${esc(i)}</span>`).join('')}</td><td>${c.workSec}s / ${c.restSec}s</td>${r.stations.map((s) => { const e = c.exercises.find((x) => x.station === s.n) || {}; return `<td>${esc(e.exercise)}<br><span class="mute">${esc(e.variant)}</span></td>`; }).join('')}</tr>`).join('')}</table>
+  <h3>Circuito personalizado</h3><div class="tw"><table><tr><th>Cliente</th><th>Trabajo / descanso</th>${r.stations.map((s) => `<th>Est. ${s.n}<br><span class="nc">${esc(s.name)}</span></th>`).join('')}</tr>
+  ${r.perClient.map((c) => `<tr><td><b>${esc(c.name)}</b><br><span class="tag">${c.level}</span>${(c.injuries || []).map((i) => `<span class="tag bad">⚠ ${esc(i)}</span>`).join('')}</td><td>${c.workSec}s / ${c.restSec}s</td>${r.stations.map((s) => { const e = c.exercises.find((x) => x.station === s.n) || {}; return `<td>${esc(e.exercise)}<br><span class="mute">${esc(e.variant)}</span></td>`; }).join('')}</tr>`).join('')}</table></div>
   <h3>⏱ Tiempo de atención del coach</h3>
-  ${r.perClient.map((c) => `<div style="margin:6px 0"><div class="row sp"><span>${esc(c.name)} <span class="mute">· ${esc(c.notes)}</span></span><b>${c.attentionMin} min</b></div><div class="meter"><i style="width:${(c.attentionMin / maxA) * 100}%"></i></div></div>`).join('')}
-  ${r.rotation?.length ? `<h3>Dónde enfocarte en cada estación</h3><table><tr><th>Ronda</th>${r.stations.map((s) => `<th>Est. ${s.n}</th>`).join('')}</tr>${Array.from({ length: r.rounds }, (_, i) => `<tr><td>${i + 1}</td>${r.stations.map((s) => `<td>${esc(nm(rot[i + 1]?.[s.n]))}</td>`).join('')}</tr>`).join('')}</table>` : ''}
-  <h3>Enfriamiento</h3><ul>${r.cooldown.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-  <h3>Tips</h3><ul>${r.coachTips.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-  <div class="bar"><button class="pri" data-act="plan-sched">📅 Agendar como cita grupal</button><button onclick="print()">Imprimir</button></div></div>`;
+  ${r.perClient.map((c) => `<div class="att"><div class="row sp"><span>${esc(c.name)} <span class="mute">· ${esc(c.notes)}</span></span><b>${c.attentionMin} min</b></div><div class="meter"><i style="width:${(c.attentionMin / maxA) * 100}%"></i></div></div>`).join('')}
+  ${r.rotation?.length ? `<h3>Dónde enfocarte en cada estación</h3><div class="tw"><table><tr><th>Ronda</th>${r.stations.map((s) => `<th>Est. ${s.n}</th>`).join('')}</tr>${Array.from({ length: r.rounds }, (_, i) => `<tr><td>${i + 1}</td>${r.stations.map((s) => `<td>${esc(nm(rot[i + 1]?.[s.n]))}</td>`).join('')}</tr>`).join('')}</table></div>` : ''}
+  <h3>Enfriamiento</h3><ul>${r.cooldown.map((x) => `<li>${esc(x)}</li>`).join('')}</ul><h3>Tips</h3><ul>${r.coachTips.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+  <div class="bar">${btn('Agendar como cita grupal', 'plan-sched', '', 'cal', 'pri')}<button onclick="print()">${ic('print', 16)}Imprimir</button></div></section>`;
 }
 
-V.ajustes = () => `<h1>Ajustes</h1><p class="sub">Configuración y respaldos</p>
-  <div class="card"><h3>Cuenta</h3><p>${esc(USER.email)}</p><div class="bar"><button data-act="logout">Cerrar sesión</button></div></div>
-  <div class="card"><h3>IA (Claude)</h3><p class="mute">Con tu API key de Anthropic, "Entrenar en grupo" usa IA para razonar sobre cada cliente. Sin key funciona igual con el sistema de reglas. La key se guarda solo en tu cuenta.</p>
-  <p>Estado: ${S.settings?.apiKey ? '<span class="tag ok">API key configurada</span>' : '<span class="tag warn">Sin API key (usa reglas)</span>'}</p>
-  <div class="row"><input id="key" type="password" placeholder="sk-ant-…" autocomplete="off"><button class="pri" data-act="key-save">Guardar</button></div></div>
-  <div class="card"><h3>Respaldo de datos</h3><div class="bar"><button data-act="export">Descargar respaldo (.json)</button><label class="btn" style="margin:0;cursor:pointer">Restaurar respaldo<input type="file" id="imp" accept=".json" hidden></label><button data-act="demo">Agregar datos de ejemplo</button><button class="del" data-act="reset">Vaciar mi cuenta</button></div></div>`;
+// ---------- Hoja imprimible ----------
+V.hoja = (id) => {
+  const c = cl(id); if (!c) return '<p>No encontrado</p>';
+  const r = S.routines.find((x) => x.id === c.routineId), d = S.diets.find((x) => x.id === c.dietId);
+  return `<div class="bar noprint">${`<a href="#/cliente/${c.id}">${ic('back', 16)} Volver</a>`}<span class="grow"></span><button class="pri" onclick="print()">${ic('print', 16)}Imprimir / guardar PDF</button></div>
+  <article class="sheet"><header><h1>${esc(S.settings?.brand || 'Plan de entrenamiento')}</h1><p>Plan de <b>${esc(c.name)}</b> · ${fdate(today())}</p><p class="mute">${esc(c.goal)} · ${TRACK_NAME[c.track || 'general']} · ${c.level}${c.injuries.length ? ' · cuidar: ' + esc(c.injuries.join(', ')) : ''}</p></header>
+  ${r ? `<h2>Entrenamiento · ${esc(r.name)}</h2>${r.program ? `<p class="mute">${r.program.weeks.map((w) => `${esc(w.label)}: RIR ${esc(w.rir)}`).join(' · ')}</p>` : ''}${r.days.map((dd) => `<h3>${esc(dd.name)}</h3><table class="st"><tr><th>Ejercicio</th><th>Series × reps</th><th>Descanso</th><th>Nota</th></tr>${dd.items.map((it) => `<tr><td>${esc(ex(it.exId)?.name || '?')}</td><td>${it.sets} × ${esc(it.reps)}</td><td>${esc(it.rest)}</td><td>${esc(it.note)}</td></tr>`).join('')}</table>`).join('')}` : '<p class="mute">Sin programa asignado.</p>'}
+  ${d ? `<h2>Alimentación · ${esc(d.name)}</h2><p>${d.kcal} kcal · Proteína ${d.protein} g · Carbohidratos ${d.carbs} g · Grasa ${d.fat} g</p>${d.days.map((dd) => `<h3>${esc(dd.name)}</h3><table class="st">${dd.meals.map((m) => `<tr><td style="width:22%"><b>${esc(m.name)}</b> ${esc(m.time)}</td><td>${esc(m.food)}</td></tr>`).join('')}</table>`).join('')}${d.notes ? `<p class="mute">${esc(d.notes)}</p>` : ''}` : ''}
+  <footer class="mute">Orientación de entrenamiento y alimentación. No sustituye valoración médica.</footer></article>`;
+};
+
+V.ajustes = () => page('Ajustes', 'Tu marca, IA, cuenta y respaldos', '',
+  `<div class="cols"><section class="card"><h3>Tu marca</h3><label class="fl">Nombre que aparece en hojas impresas y saludo</label><input id="brand" value="${esc(S.settings?.brand || '')}" placeholder="Ej. CR Athletic Lab"><div class="bar">${btn('Guardar', 'brand-save', '', 'check', 'pri')}</div></section>
+  <section class="card"><h3>Cuenta</h3><p>${esc(USER.email)}</p><div class="bar">${btn('Cerrar sesión', 'logout', '', 'out')}</div></section></div>
+  <section class="card"><h3>IA (Claude)</h3><p class="mute">Con tu API key de Anthropic, "Entrenar en grupo" usa IA para razonar sobre cada cliente. Sin key funciona igual con el sistema de reglas. La key se guarda solo en tu cuenta.</p>
+  <p>Estado: ${S.settings?.apiKey ? '<span class="tag ok">API key configurada</span>' : '<span class="tag warn">Sin API key (usa reglas)</span>'}</p><div class="row"><input id="key" type="password" placeholder="sk-ant-…" autocomplete="off"><button class="pri" data-act="key-save">Guardar</button></div></section>
+  <section class="card"><h3>Datos</h3><div class="bar">${btn('Descargar respaldo (.json)', 'export')}<label class="btn">Restaurar respaldo<input type="file" id="imp" accept=".json" hidden></label>${btn('Agregar datos de ejemplo', 'demo')}${btn('Vaciar mi cuenta', 'reset', '', 'trash', 'del')}</div></section>
+  <p class="mini">Imágenes de ejercicios: <a href="https://github.com/yuhonas/free-exercise-db" target="_blank">free-exercise-db</a> (dominio público).</p>`);
 
 // ---------- Texto para compartir ----------
 const routineText = (r) => `*${r.name}* — ${r.goal}\n\n` + r.days.map((d) => `*${d.name}*\n` + d.items.map((i) => { const e = ex(i.exId); return `• ${e?.name || '?'}: ${i.sets}x${i.reps} (desc. ${i.rest})${i.note ? ' — ' + i.note : ''}`; }).join('\n')).join('\n\n');
 const dietText = (d) => `*${d.name}*\n${d.kcal} kcal · P ${d.protein}g · C ${d.carbs}g · G ${d.fat}g\n\n` + d.days.map((x) => `*${x.name}*\n` + x.meals.map((m) => `• ${m.name} (${m.time}): ${m.food}`).join('\n')).join('\n\n') + (d.notes ? `\n\n${d.notes}` : '');
 
 // ---------- Acciones ----------
-const find = (col, id) => S[col].find((x) => x.id === id);
-const del = (col, id) => { S[col] = S[col].filter((x) => x.id !== id); };
+const groupForm = (g) => form(g.id ? 'Editar grupo' : 'Nuevo grupo', [{ k: 'name', l: 'Nombre', req: 1 }, { k: 'notes', l: 'Horario / notas' }, { k: 'clientIds', l: 'Integrantes', t: 'checks', o: S.clients.map((c) => [c.id, c.name]) }], g);
+const exFields = () => [{ k: 'name', l: 'Nombre', req: 1 }, { k: 'pattern', l: 'Patrón', t: 'select', o: plain(PATTERNS) }, { k: 'muscle', l: 'Músculo principal', t: 'select', o: plain(GROUPS) }, { k: 'level', l: 'Nivel', t: 'select', o: LEVELS }, { k: 'type', l: 'Tipo', t: 'select', o: plain(TYPES) }, { k: 'equip', l: 'Equipo', t: 'checks', o: [['peso corporal', 'peso corporal'], ...plain(EQUIP)] }, { k: 'avoid', l: 'Precaución con (lesiones)', t: 'tags', ph: 'rodilla, hombro…' }, { k: 'tags', l: 'Perfiles', t: 'checks', o: [['general', 'General'], ['beisbol', 'Béisbol'], ['hipertrofia', 'Hipertrofia']] }, { k: 'desc', l: 'Cómo se hace', t: 'textarea' }, { k: 'cues', l: 'Puntos clave (separa con " · ")' }, { k: 'regress', l: 'Versión más fácil' }, { k: 'progress', l: 'Versión más difícil' }, { k: 'video', l: 'Link de video (opcional)' }];
+const planPrice = (c) => S.plans.find((p) => p.id === c?.planId)?.price || 0;
+const payFields = () => [{ k: 'clientId', l: 'Cliente', t: 'select', o: S.clients.map((c) => [c.id, c.name]) }, { k: 'concept', l: 'Concepto' }, { k: 'amount', l: 'Monto (MXN)', t: 'number' }, { k: 'due', l: 'Fecha de vencimiento', t: 'date' }, { k: 'status', l: 'Estado', t: 'select', o: [['pendiente', 'Pendiente'], ['pagado', 'Ya pagado']] }, { k: 'method', l: 'Método (si ya pagó)' }];
+function addAppt(v) {
+  const clash = S.appointments.find((a) => a.date === v.date && a.time === v.time && a.status === 'programada');
+  if (clash && !confirm(`Ya hay una cita a las ${v.time} (${apptWho(clash)}). ¿Agendar de todos modos?`)) return;
+  S.appointments.push({ id: uid('a'), ...v }); save(); toast('Cita agendada'); if (location.hash !== '#/agenda') location.hash = '#/agenda'; else render();
+}
+function readPlanForm() {
+  const p = ui.plan;
+  p.clientIds = [...document.querySelectorAll('#pl-clients input:checked')].map((i) => i.value);
+  p.equipment = [...document.querySelectorAll('#pl-equip input:checked')].map((i) => i.value);
+  p.minutes = Math.max(20, Math.min(120, +$('#pl-min').value || 45)); p.focus = $('#pl-focus').value; p.useAI = $('#pl-ai').value === '1';
+}
+function normalizeClient(v) { return { ...v, active: v.active === '1' || v.active === true, activity: Number(v.activity) || 1.55 }; }
+
 const ACT = {
   close: closeModal,
+  go: (el) => { location.hash = el.dataset.to; },
   tab: (el) => { tab[el.dataset.k] = el.dataset.v; render(); },
+  tf: (el) => { ui.tf = el.dataset.v; render(); },
   async 'client-new'() {
-    const v = await form('Nuevo cliente', clientFields(), { level: 'principiante', active: '1', injuries: [] }); if (!v) return;
-    S.clients.push({ id: uid('c'), ...v, active: v.active === '1', measures: [], files: [] }); save(); location.hash = '#/cliente/' + S.clients.at(-1).id; render();
+    const v = await form('Nuevo cliente', clientFields(), newClientDefaults()); if (!v) return;
+    const c = { id: uid('c'), ...normalizeClient(v), measures: [], files: [], checkins: [] }; S.clients.push(c); save(); location.hash = '#/cliente/' + c.id; render();
   },
   async 'client-edit'(el) {
     const c = cl(el.dataset.id); const v = await form('Editar cliente', clientFields(), { ...c, active: c.active ? '1' : '0' }); if (!v) return;
-    Object.assign(c, v, { active: v.active === '1' }); save(); render();
+    Object.assign(c, normalizeClient(v)); save(); render();
   },
   'client-del'(el) { if (!confirm('¿Eliminar cliente y todo su historial?')) return; const id = el.dataset.id; del('clients', id); S.groups.forEach((g) => (g.clientIds = g.clientIds.filter((i) => i !== id))); S.payments = S.payments.filter((p) => p.clientId !== id); save(); location.hash = '#/clientes'; },
   async 'measure-add'(el) {
@@ -317,13 +489,50 @@ const ACT = {
     cl(el.dataset.id).measures.push(v); save(); render();
   },
   'measure-del'(el) { cl(el.dataset.id).measures.splice(+el.dataset.i, 1); save(); render(); },
+  async 'checkin-add'(el) {
+    const sc = [[5, '5 · Excelente'], [4, '4'], [3, '3'], [2, '2'], [1, '1 · Muy mal']];
+    const v = await form('Check-in semanal', [{ k: 'date', l: 'Fecha', t: 'date', req: 1 }, { k: 'adherence', l: 'Adherencia al plan', t: 'select', o: sc }, { k: 'energy', l: 'Energía', t: 'select', o: sc }, { k: 'sleep', l: 'Sueño (horas por noche)', t: 'number', step: '0.5' }, { k: 'pain', l: 'Molestias o dolor (si hay)' }, { k: 'note', l: 'Nota', t: 'textarea' }], { date: today(), adherence: 4, energy: 4 }); if (!v) return;
+    const c = cl(el.dataset.id); (c.checkins ||= []).push({ ...v, adherence: +v.adherence, energy: +v.energy }); save(); render();
+  },
+  'checkin-del'(el) { cl(el.dataset.id).checkins.splice(+el.dataset.i, 1); save(); render(); },
+  async 'parq-edit'(el) {
+    const c = cl(el.dataset.id); const pq = c.parq || { a: [], consent: false };
+    const v = await form('Ficha de salud', [{ k: 'a', l: 'Marca las preguntas con respuesta SÍ', t: 'checks', o: PARQ.map((q, i) => [String(i), q]) }, { k: 'cleared', l: 'Si hay respuestas Sí: ¿autorización médica?', t: 'select', o: [['0', 'No registrada'], ['1', 'Sí, autorizado por médico']] }, { k: 'consent', l: 'Consentimiento informado', t: 'select', o: [['0', 'Pendiente'], ['1', 'Firmado / aceptado por el cliente']] }], { a: pq.a || [], cleared: pq.cleared ? '1' : '0', consent: pq.consent ? '1' : '0' }); if (!v) return;
+    c.parq = { a: v.a, cleared: v.cleared === '1', consent: v.consent === '1', date: today() }; save(); render();
+  },
   async 'file-open'(el) { const f = cl(el.dataset.id).files[+el.dataset.i]; const { data, error } = await sb.storage.from('client-files').createSignedUrl(f.path, 3600); if (error) return toast(error.message); window.open(data.signedUrl, '_blank'); },
   async 'file-del'(el) { const c = cl(el.dataset.id); const f = c.files[+el.dataset.i]; if (!confirm('¿Borrar ' + f.name + '?')) return; await sb.storage.from('client-files').remove([f.path]); c.files.splice(+el.dataset.i, 1); save(); render(); },
+
+  async 'prog-gen'(el) {
+    const c = cl(el.dataset.id);
+    const equipment = [...document.querySelectorAll('#g-equip input:checked')].map((i) => i.value);
+    const days = +$('#g-days').value, finisher = $('#g-fin').value === '1';
+    const routine = generateProgram(c, S.exercises, { days, equipment, finisher });
+    ui.draft = { clientId: c.id, routine, days, finisher, equipment }; render();
+    if (!routine.days.some((d) => d.items.length)) toast('No hubo ejercicios compatibles; revisa equipo y lesiones');
+  },
+  'prog-save'(el) {
+    const c = cl(el.dataset.id), r = ui.draft.routine; const rt = { id: uid('r'), name: r.name, goal: r.goal, days: r.days, program: r.program };
+    S.routines.push(rt); c.routineId = rt.id; ui.draft = null; save(); render(); toast('Programa guardado y asignado');
+  },
+  'prog-drop'() { ui.draft = null; render(); },
+  'nut-calc'(el) {
+    const c = cl(el.dataset.id), goal = $('#n-goal').value, rate = $('#n-rate').value, meals = +$('#n-meals').value;
+    const result = calcTargets(c, goal, rate ? +rate : null);
+    ui.nut = { clientId: c.id, goal, rate, meals, result };
+    if (!result.error) { ui.nut.menu = buildMenu(c, result, { meals }); ui.nut.tips = trackTips(c, goal); }
+    render();
+  },
+  'nut-save'(el) {
+    const c = cl(el.dataset.id), n = ui.nut, r = n.result;
+    const d = { id: uid('di'), name: `${c.name.split(' ')[0]} · ${{ perder: 'definición', mantener: 'mantenimiento', ganar: 'volumen' }[n.goal]}`, kcal: r.kcal, protein: r.p, carbs: r.c, fat: r.f, notes: [...r.notes, ...n.tips].join('\n'), days: n.menu };
+    S.diets.push(d); c.dietId = d.id; save(); render(); toast('Dieta guardada y asignada');
+  },
 
   async 'group-new'() { const v = await groupForm({ clientIds: [] }); if (v) { S.groups.push({ id: uid('g'), ...v }); save(); render(); } },
   async 'group-edit'(el) { const g = find('groups', el.dataset.id); const v = await groupForm(g); if (v) { Object.assign(g, v); save(); render(); } },
   'group-del'(el) { if (confirm('¿Eliminar grupo?')) { del('groups', el.dataset.id); save(); render(); } },
-  'plan-group'(el) { const g = find('groups', el.dataset.id); ui.plan.clientIds = g.clientIds.filter((i) => cl(i)?.active); ui.result = null; location.hash = '#/entrenar'; render(); },
+  'plan-group'(el) { const g = find('groups', el.dataset.id); ui.plan.clientIds = g.clientIds.filter((i) => cl(i)?.active); ui.result = null; if (location.hash !== '#/entrenar') location.hash = '#/entrenar'; else render(); },
 
   async 'appt-new'() { const v = await form('Nueva cita', apptFields(), { date: today(), time: '07:00', duration: 60, type: 'individual', status: 'programada', clientIds: [], groupId: '' }); if (v) addAppt(v); },
   async 'appt-edit'(el) { const a = find('appointments', el.dataset.id); const v = await form('Editar cita', apptFields(), a); if (v) { Object.assign(a, v); save(); render(); } },
@@ -339,14 +548,15 @@ const ACT = {
   'ex-view'(el) {
     const e = ex(el.dataset.id); if (!e) return toast('Elige primero un ejercicio');
     const yt = 'https://www.youtube.com/results?search_query=' + encodeURIComponent('cómo hacer ' + e.name + ' técnica correcta');
-    dialog(`<h2 style="margin-top:0">${esc(e.name)}</h2><p><span class="tag">${e.pattern}</span><span class="tag">${e.level}</span> <span class="mute">${esc(e.muscle)}</span></p>
-      <h3>Cómo se hace</h3><p>${esc(e.desc)}</p><h3>Puntos clave</h3><p>${esc(e.cues).split(' · ').map((x) => `<span class="tag">${x}</span>`).join('')}</p>
+    dialog(`<h2>${esc(e.name)}</h2><p class="tags"><span class="tag">${e.pattern}</span><span class="tag">${esc(e.muscle)}</span><span class="tag">${esc(e.type || '')}</span><span class="tag lv-${e.level}">${e.level}</span>${(e.tags || []).map((t) => `<span class="tag t-${t}">${t}</span>`).join('')}</p>
+      ${e.images?.length ? `<div class="exshow">${e.images.map((u) => `<img src="${u}" alt="" onerror="this.remove()">`).join('')}</div>` : ''}
+      <h3>Cómo se hace</h3><p>${esc(e.desc)}</p><h3>Puntos clave</h3><p class="tags">${esc(e.cues).split(' · ').map((x) => `<span class="tag">${x}</span>`).join('')}</p>
       <div class="two"><div class="card"><b>Más fácil</b><br>${esc(e.regress)}</div><div class="card"><b>Más difícil</b><br>${esc(e.progress)}</div></div>
       ${e.avoid.length ? `<p>Precaución si hay: ${e.avoid.map((a) => `<span class="tag bad">${esc(a)}</span>`).join('')}</p>` : ''}
-      <a class="btn" target="_blank" href="${esc(e.video || yt)}">▶ ${e.video ? 'Ver video' : 'Buscar video de ejemplo'}</a>`);
+      <p class="bar"><a class="btn" target="_blank" href="${esc(e.video || yt)}">▶ ${e.video ? 'Ver video' : 'Buscar video de ejemplo'}</a>${btn('Editar', 'ex-edit', `data-id="${e.id}"`, 'edit')}</p>`, true);
   },
-  async 'ex-new'() { const v = await form('Nuevo ejercicio', exFields(), { pattern: 'sentadilla', level: 'intermedio', equip: ['peso corporal'], avoid: [] }); if (v) { S.exercises.push({ id: uid('x'), ...v }); save(); render(); } },
-  async 'ex-edit'(el) { const e = ex(el.dataset.id); const v = await form('Editar ejercicio', exFields(), e); if (v) { Object.assign(e, v); save(); render(); } },
+  async 'ex-new'() { const v = await form('Nuevo ejercicio', exFields(), { pattern: 'sentadilla', muscle: 'cuádriceps', level: 'intermedio', type: 'fuerza', equip: ['peso corporal'], avoid: [], tags: ['general'] }); if (v) { S.exercises.push({ id: uid('x'), ...v, images: [], custom: true }); save(); render(); } },
+  async 'ex-edit'(el) { closeModal(); const e = ex(el.dataset.id); const v = await form('Editar ejercicio', exFields(), e); if (v) { Object.assign(e, v, { custom: true }); save(); render(); } },
 
   async 'diet-new'() { const v = await form('Nueva dieta', [{ k: 'name', l: 'Nombre', req: 1 }, { k: 'kcal', l: 'Kcal', t: 'number' }, { k: 'protein', l: 'Proteína g', t: 'number' }, { k: 'carbs', l: 'Carbs g', t: 'number' }, { k: 'fat', l: 'Grasa g', t: 'number' }], { kcal: 2000, protein: 140, carbs: 220, fat: 60 }); if (!v) return; const d = { id: uid('di'), ...v, notes: '', days: [{ name: 'Menú base', meals: [{ name: 'Desayuno', time: '8:00', food: '' }] }] }; S.diets.push(d); save(); location.hash = '#/dieta/' + d.id; },
   'diet-del'(el) { if (confirm('¿Eliminar dieta?')) { del('diets', el.dataset.id); S.clients.forEach((c) => c.dietId === el.dataset.id && (c.dietId = '')); save(); render(); } },
@@ -360,7 +570,7 @@ const ACT = {
     const v = await form('Registrar cobro', payFields(), { clientId: S.clients[0]?.id, due: today(), status: 'pendiente', amount: planPrice(S.clients[0]), concept: S.plans.find((p) => p.id === S.clients[0]?.planId)?.name || '' }); if (!v) return;
     S.payments.push({ id: uid('p'), ...v, paidOn: v.status === 'pagado' ? today() : '' }); save(); render();
   },
-  async 'pay-done'(el) { const p = find('payments', el.dataset.id); const v = await form('Marcar como pagado', [{ k: 'paidOn', l: 'Fecha de pago', t: 'date' }, { k: 'method', l: 'Método', t: 'select', o: [['Efectivo', 'Efectivo'], ['Transferencia', 'Transferencia'], ['Tarjeta', 'Tarjeta'], ['Otro', 'Otro']] }], { paidOn: today(), method: 'Transferencia' }); if (!v) return; Object.assign(p, v, { status: 'pagado' }); save(); render(); },
+  async 'pay-done'(el) { const p = find('payments', el.dataset.id); const v = await form('Marcar como pagado', [{ k: 'paidOn', l: 'Fecha de pago', t: 'date' }, { k: 'method', l: 'Método', t: 'select', o: plain(['Efectivo', 'Transferencia', 'Tarjeta', 'Otro']) }], { paidOn: today(), method: 'Transferencia' }); if (!v) return; Object.assign(p, v, { status: 'pagado' }); save(); render(); },
   'pay-del'(el) { if (confirm('¿Eliminar registro de pago?')) { del('payments', el.dataset.id); save(); render(); } },
   'pay-remind'(el) {
     const p = find('payments', el.dataset.id), c = cl(p.clientId);
@@ -390,7 +600,7 @@ const ACT = {
       let res = null;
       if (p.useAI) {
         const skeleton = rulesPlan(S, p);
-        const clients = S.clients.filter((c) => p.clientIds.includes(c.id)).map((c) => ({ id: c.id, nombre: c.name, nivel: c.level, lesiones: c.injuries, objetivo: c.goal, notas: c.notes, ultimoPeso: (c.measures.at(-1) || {}).weight }));
+        const clients = S.clients.filter((c) => p.clientIds.includes(c.id)).map((c) => ({ id: c.id, nombre: c.name, nivel: c.level, tipo: c.track, lesiones: c.injuries, objetivo: c.goal, notas: c.notes, ultimoPeso: (c.measures.at(-1) || {}).weight }));
         const lib = S.exercises.map((e) => ({ id: e.id, nombre: e.name, patron: e.pattern, nivel: e.level, equipo: e.equip, evitar: e.avoid, facil: e.regress, dificil: e.progress }));
         const { data, error } = await sb.functions.invoke('group-plan', { body: { clients, lib, params: p, skeleton, apiKey: S.settings?.apiKey || '' } });
         let detail = data?.error;
@@ -406,43 +616,30 @@ const ACT = {
     const v = await form('Agendar sesión grupal', [{ k: 'date', l: 'Fecha', t: 'date', req: 1 }, { k: 'time', l: 'Hora', t: 'time', req: 1 }], { date: today(), time: '07:00' }); if (!v) return;
     addAppt({ ...v, duration: ui.result.totalMinutes, type: 'grupal', groupId: '', clientIds: ui.plan.clientIds, status: 'programada', notes: ui.result.title });
   },
+  'brand-save'() { (S.settings ||= {}).brand = $('#brand').value.trim(); save(); toast('Guardado'); },
   'key-save'() { (S.settings ||= {}).apiKey = $('#key').value.trim(); save(); toast(S.settings.apiKey ? 'API key guardada' : 'API key eliminada'); render(); },
   async logout() { await flush(); await sb.auth.signOut(); location.reload(); },
-  demo() { if (S.clients.length && !confirm('Se agregarán los datos de ejemplo a los tuyos.')) return; const d = demo(); for (const k of Object.keys(d)) S[k] = [...S[k], ...d[k]]; save(); render(); toast('Datos de ejemplo agregados'); },
+  demo() { if (S.clients.length && !confirm('Se agregarán los datos de ejemplo a los tuyos.')) return; const d = demo(); for (const k of Object.keys(d)) S[k] = [...S[k], ...d[k]]; migrate(); save(); render(); toast('Datos de ejemplo agregados'); },
   export() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' })); a.download = `coachdesk-respaldo-${today()}.json`; a.click(); },
   reset() { if (!confirm('Esto BORRA todos tus clientes, rutinas, pagos y citas. ¿Seguro?')) return; S = blank(); save(); render(); toast('Cuenta vaciada'); },
 };
 
-const groupForm = (g) => form(g.id ? 'Editar grupo' : 'Nuevo grupo', [{ k: 'name', l: 'Nombre', req: 1 }, { k: 'notes', l: 'Horario / notas' }, { k: 'clientIds', l: 'Integrantes', t: 'checks', o: S.clients.map((c) => [c.id, c.name]) }], g);
-const exFields = () => [{ k: 'name', l: 'Nombre', req: 1 }, { k: 'pattern', l: 'Patrón', t: 'select', o: PATTERNS.map((p) => [p, p]) }, { k: 'level', l: 'Nivel', t: 'select', o: LEVELS }, { k: 'muscle', l: 'Músculos' }, { k: 'equip', l: 'Equipo', t: 'checks', o: [['peso corporal', 'peso corporal'], ...EQUIP.map((e) => [e, e])] }, { k: 'avoid', l: 'Precaución con (lesiones)', t: 'tags', ph: 'rodilla, hombro…' }, { k: 'desc', l: 'Cómo se hace', t: 'textarea' }, { k: 'cues', l: 'Puntos clave (separa con " · ")' }, { k: 'regress', l: 'Versión más fácil' }, { k: 'progress', l: 'Versión más difícil' }, { k: 'video', l: 'Link de video (opcional)' }];
-const planPrice = (c) => S.plans.find((p) => p.id === c?.planId)?.price || 0;
-const payFields = () => [{ k: 'clientId', l: 'Cliente', t: 'select', o: S.clients.map((c) => [c.id, c.name]) }, { k: 'concept', l: 'Concepto' }, { k: 'amount', l: 'Monto (MXN)', t: 'number' }, { k: 'due', l: 'Fecha de vencimiento', t: 'date' }, { k: 'status', l: 'Estado', t: 'select', o: [['pendiente', 'Pendiente'], ['pagado', 'Ya pagado']] }, { k: 'method', l: 'Método (si ya pagó)' }];
-function addAppt(v) {
-  const clash = S.appointments.find((a) => a.date === v.date && a.time === v.time && a.status === 'programada');
-  if (clash && !confirm(`Ya hay una cita a las ${v.time} (${apptWho(clash)}). ¿Agendar de todos modos?`)) return;
-  S.appointments.push({ id: uid('a'), ...v }); save(); toast('Cita agendada'); if (location.hash !== '#/agenda') location.hash = '#/agenda'; else render();
-}
-function readPlanForm() {
-  const p = ui.plan;
-  p.clientIds = [...document.querySelectorAll('#pl-clients input:checked')].map((i) => i.value);
-  p.equipment = [...document.querySelectorAll('#pl-equip input:checked')].map((i) => i.value);
-  p.minutes = Math.max(20, Math.min(120, +$('#pl-min').value || 45)); p.focus = $('#pl-focus').value; p.useAI = $('#pl-ai').value === '1';
-}
-
-// ---------- Eventos globales ----------
+// ---------- Eventos ----------
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
-  if (el && ACT[el.dataset.act]) { if (el.tagName === 'A' && el.dataset.act !== 'plan-group') e.preventDefault(); ACT[el.dataset.act](el); }
+  if (el && ACT[el.dataset.act]) { if (el.tagName === 'A' || el.tagName === 'LABEL') e.preventDefault(); ACT[el.dataset.act](el); }
   if (e.target.id === 'modal') closeModal();
+  if (e.target.closest('#nav a')) document.body.classList.remove('navopen');
+  if (e.target.closest('#burger')) document.body.classList.toggle('navopen');
 });
 document.addEventListener('change', async (e) => {
   const t = e.target;
   if (t.dataset.path) {
     const [col, id] = t.closest('[data-root]').dataset.root.split(':');
     setPath(find(col, id), t.dataset.path, t.type === 'number' ? Number(t.value) : t.value); save();
-    if (t.tagName === 'SELECT' || /\.(sets|reps)$/.test(t.dataset.path) === false && ['kcal', 'protein', 'carbs', 'fat'].includes(t.dataset.path)) render();
+    if (t.tagName === 'SELECT' || t.dataset.re) render();
   } else if (['pl-min', 'pl-focus', 'pl-ai'].includes(t.id) || t.closest('#pl-clients, #pl-equip')) readPlanForm();
-  else if (t.id === 'pat') { ui.pat = t.value; render(); }
+  else if (['lpat', 'lgrp', 'ltype', 'llvl', 'ltag'].includes(t.id)) { Object.assign(ui.lib, { lpat: { pattern: t.value }, lgrp: { grp: t.value }, ltype: { type: t.value }, llvl: { level: t.value }, ltag: { tag: t.value } }[t.id]); render(); }
   else if (t.dataset.notes) { cl(t.dataset.notes).notes = t.value; save(); toast('Nota guardada'); }
   else if (t.id === 'up') {
     const c = cl(t.dataset.client);
@@ -455,30 +652,48 @@ document.addEventListener('change', async (e) => {
     }
     save(); render(); toast('Archivo(s) subido(s)');
   } else if (t.id === 'imp') {
-    try { const d = JSON.parse(await t.files[0].text()); if (!d.clients || !d.exercises) throw 0; if (!confirm('Se reemplazarán tus datos actuales.')) return; S = d; save(); render(); toast('Respaldo restaurado'); } catch { toast('Archivo de respaldo inválido'); }
+    try { const d = JSON.parse(await t.files[0].text()); if (!d.clients || !d.exercises) throw 0; if (!confirm('Se reemplazarán tus datos actuales.')) return; S = d; migrate(); save(); render(); toast('Respaldo restaurado'); } catch { toast('Archivo de respaldo inválido'); }
   }
 });
-document.addEventListener('input', (e) => { if (e.target.id === 'q') { ui.q = e.target.value; const p = e.target.selectionStart; render(); const q = $('#q'); q.focus(); q.setSelectionRange(p, p); } });
+document.addEventListener('input', (e) => {
+  const id = e.target.id;
+  if (id === 'q' || id === 'lq') {
+    if (id === 'q') ui.q = e.target.value; else ui.lib.q = e.target.value;
+    const p = e.target.selectionStart; render(); const q = $('#' + id); q.focus(); q.setSelectionRange(p, p);
+  }
+});
 
 // ---------- Router ----------
+const NAV = [['#/', 'Inicio', 'home'], ['#/clientes', 'Clientes', 'users'], ['#/agenda', 'Agenda', 'cal'], ['#/entrenamientos', 'Entrenamientos', 'clip'], ['#/biblioteca', 'Biblioteca', 'grid'], ['#/nutricion', 'Nutrición', 'leaf'], ['#/grupos', 'Grupos', 'team'], ['#/entrenar', 'Entrenar en grupo', 'zap'], ['#/pagos', 'Pagos', 'dollar'], ['#/ajustes', 'Ajustes', 'cog']];
 function render() {
-  const [seg, id] = (location.hash.slice(2) || '').split('/');
-  const name = seg || 'home';
   if (!S) return;
+  let [seg, id] = (location.hash.slice(2) || '').split('/');
+  if (seg === 'rutinas') seg = 'entrenamientos'; if (seg === 'dietas') seg = 'nutricion';
+  const name = seg || 'home';
   $('#main').innerHTML = (V[name] || (() => '<p>No encontrado</p>'))(id);
-  const base = { cliente: 'clientes', rutina: 'rutinas', dieta: 'dietas' }[name] || name;
-  document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '#/' + (base === 'home' ? '' : base)));
+  const base = { cliente: 'clientes', rutina: 'entrenamientos', dieta: 'nutricion', hoja: 'clientes' }[name] || name;
+  $('#nav').innerHTML = `<div class="brand"><span class="logo">${ic('zap', 18)}</span>CoachDesk</div>` + NAV.map(([h, l, i]) => `<a href="${h}" class="${h === '#/' + (base === 'home' ? '' : base) ? 'on' : ''}">${ic(i)}<span>${l}</span></a>`).join('') + `<div class="who">${esc(S.settings?.brand || USER.email)}</div>`;
+  window.scrollTo(0, 0);
 }
 window.addEventListener('hashchange', () => { closeModal(); render(); });
-const blank = () => ({ exercises: structuredClone(SEED_EX), clients: [], groups: [], appointments: [], routines: [], diets: [], payments: [], plans: [], settings: {} });
 
+// ---------- Datos ----------
+const blank = () => ({ exercises: structuredClone(LIB), libVersion: LIB_VERSION, clients: [], groups: [], appointments: [], routines: [], diets: [], payments: [], plans: [], settings: {} });
+function migrate() {
+  for (const k of ['clients', 'groups', 'appointments', 'routines', 'diets', 'payments', 'plans', 'exercises']) S[k] ||= [];
+  S.settings ||= {};
+  S.exercises = mergeLibrary(S.exercises); S.libVersion = LIB_VERSION;
+  S.clients.forEach((c) => { Object.assign(c, { track: c.track || 'general', injuries: c.injuries || [], measures: c.measures || [], files: c.files || [], checkins: c.checkins || [], equipment: c.equipment || ['mancuernas', 'banda', 'banco'], foodsAvoid: c.foodsAvoid || [], daysPerWeek: c.daysPerWeek || 3, sex: c.sex || 'm', activity: c.activity || 1.55 }); });
+  // rutinas viejas que apuntan a ejercicios que ya no existen
+  S.routines.forEach((r) => r.days.forEach((d) => d.items.forEach((it) => { if (it.exId && !S.exercises.some((e) => e.id === it.exId)) it.exId = ''; })));
+}
 async function start() {
   const { data, error } = await sb.from('coach_data').select('data').eq('user_id', USER.id).maybeSingle();
   if (error) { $('#main').innerHTML = `<p>Error al cargar tus datos: ${esc(error.message)}</p>`; return; }
   S = data?.data && Object.keys(data.data).length ? data.data : blank();
-  for (const k of ['clients', 'groups', 'appointments', 'routines', 'diets', 'payments', 'plans', 'exercises']) S[k] ||= [];
-  S.settings ||= {};
-  if (!data) await flush();
+  const before = S.libVersion;
+  migrate();
+  if (!data || before !== LIB_VERSION) await flush();
   document.body.classList.add('in'); $('#login').hidden = true;
   render();
 }

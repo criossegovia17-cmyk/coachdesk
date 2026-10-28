@@ -3,36 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#4f46e5">
 <title>CoachDesk</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <section id="login">
   <form id="lform" class="dlg">
-    <div class="brand">💪 CoachDesk</div>
-    <p class="mute">Clientes, rutinas, dietas, pagos y entrenamiento grupal con IA, todo en un solo lugar.</p>
+    <div class="brand"><span class="logo">⚡</span>CoachDesk</div>
+    <p class="mute">Clientes, programas, nutrición, pagos y entrenamiento grupal con IA, todo en un solo lugar.</p>
     <h2 id="ltitle">Entrar</h2>
-    <label>Correo</label><input id="lemail" type="email" required autocomplete="email">
-    <label>Contraseña (mínimo 6 caracteres)</label><input id="lpass" type="password" required minlength="6" autocomplete="current-password">
+    <label class="fl">Correo</label><input id="lemail" type="email" required autocomplete="email">
+    <label class="fl">Contraseña (mínimo 6 caracteres)</label><input id="lpass" type="password" required minlength="6" autocomplete="current-password">
     <div class="bar"><button class="pri" id="lsubmit">Entrar</button><a href="#" id="lswitch">Crear cuenta</a><span class="grow"></span><a href="#" id="lreset">Olvidé mi contraseña</a></div>
     <p id="lmsg"></p>
   </form>
 </section>
-<aside id="nav">
-  <div class="brand">💪 CoachDesk</div>
-  <a href="#/">Inicio</a>
-  <a href="#/clientes">Clientes</a>
-  <a href="#/grupos">Grupos</a>
-  <a href="#/agenda">Agenda</a>
-  <a href="#/rutinas">Rutinas y ejercicios</a>
-  <a href="#/dietas">Dietas</a>
-  <a href="#/pagos">Pagos</a>
-  <a href="#/entrenar" class="hl">✨ Entrenar en grupo (IA)</a>
-  <a href="#/ajustes">Ajustes y cuenta</a>
-</aside>
+<button id="burger" aria-label="Menú">☰ &nbsp;CoachDesk</button>
+<aside id="nav"></aside>
 <main id="main"></main>
 <div id="modal" hidden></div>
 <div id="toast" hidden></div>
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=3"></script>
 </body>
 </html>
