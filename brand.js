@@ -1,0 +1,7 @@
+// Marca C-Lab: ícono (C con pulso) y logotipo. El mismo dibujo vive en logo-mark.svg y logo.svg.
+const defs = (id) => `<defs><linearGradient id="bg${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#101a33"/><stop offset="1" stop-color="#070c18"/></linearGradient><linearGradient id="ac${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d9ff4a"/><stop offset="1" stop-color="#9be21b"/></linearGradient></defs>`;
+const mark = (id) => `${defs(id)}<rect width="64" height="64" rx="16" fill="url(#bg${id})"/><rect x=".75" y=".75" width="62.5" height="62.5" rx="15.25" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="1.5"/><path d="M43.6 20.6A17.5 17.5 0 1 0 43.6 43.4" fill="none" stroke="url(#ac${id})" stroke-width="7" stroke-linecap="round"/><path d="M21 33.5h7l3-9.5 4.2 17.5 3.3-8H55" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="55" cy="33.5" r="2.6" fill="#d9ff4a"/>`;
+let n = 0;
+export const logoMark = (size = 36) => { n++; return `<svg class="logo-mark" width="${size}" height="${size}" viewBox="0 0 64 64" role="img" aria-label="C-Lab">${mark('m' + n)}</svg>`; };
+// Logotipo horizontal para modo oscuro (fondo navy) o claro
+export const logoFull = (size = 36, dark = true) => `<span class="logo-full">${logoMark(size)}<span class="wm ${dark ? '' : 'on-light'}"><span class="wt"><b>C</b><i>-</i><b>LAB</b></span><small>Coaching Lab</small></span></span>`;
