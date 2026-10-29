@@ -1,5 +1,5 @@
 // Constructor de rutinas conectado a la biblioteca: se elige el ejercicio con imagen, filtros y compatibilidad con el cliente.
-import { load as loadCat, search as searchCat, loaded as catLoaded, getEx } from './catalog.js?v=16';
+import { load as loadCat, search as searchCat, loaded as catLoaded, getEx } from './catalog.js?v=17';
 export function make(x) {
   const { esc, ic, btn, $ } = x;
   const pick = (x.ui.pick ||= { routineId: null, day: 0, replace: null, q: '', grp: '', pattern: '', type: '', level: '', compat: true, added: 0 });

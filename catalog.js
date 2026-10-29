@@ -50,11 +50,11 @@ export const loaded = () => !!DB;
 export const getEx = (id) => { const e = DB?.find((q) => 'fed_' + q.id === id); return e ? toEx(e) : null; };
 export function search(f, have) {
   if (!DB) return [];
-  const q = (f.q || '').toLowerCase(), haveIds = new Set(have.map((e) => e.id)), haveImg = new Set(have.flatMap((e) => (e.images || []).slice(0, 1)));
+  const q = (f.q || '').toLowerCase(), haveIds = new Set(have.map((e) => e.id)), folder = (u) => String(u || '').split('/').slice(-2)[0], haveImg = new Set(have.flatMap((e) => (e.images || []).slice(0, 1).map(folder)));
   const out = [];
   for (const e of DB) {
     const x = toEx(e);
-    if (haveIds.has(x.id) || haveImg.has(x.images[0])) continue;
+    if (haveIds.has(x.id) || haveImg.has(folder(x.images[0]))) continue;
     if (q && !x.name.toLowerCase().includes(q) && !x.muscle.includes(q)) continue;
     if (f.grp && x.muscle !== f.grp) continue; if (f.pattern && x.pattern !== f.pattern) continue; if (f.type && x.type !== f.type) continue; if (f.level && x.level !== f.level) continue;
     out.push(x); if (out.length >= 80) break;

@@ -207,3 +207,9 @@ body.live-on{overflow:hidden}
 
 .ivbox{text-align:center;border-radius:18px;padding:22px;margin:10px 0;background:rgba(76,195,138,.14);border:2px solid #4cc38a}.ivbox.r{background:rgba(229,168,74,.13);border-color:#e5a84a}.ivbox small{display:block;letter-spacing:.14em;font-weight:700;color:var(--mute)}.ivbox b{font:800 80px/1 var(--display)}
 .tool .kpis.small{grid-template-columns:repeat(2,1fr)}
+
+#toast .tu{margin-left:10px;background:var(--accent);color:var(--accent-ink);border:0;padding:3px 12px;border-radius:99px;font-weight:800;font-size:13px}
+#pend{display:none;position:fixed;left:50%;transform:translateX(-50%);top:12px;z-index:70;background:#3a2a05;color:#ffd685;border:1px solid #8a6212;padding:9px 16px;border-radius:99px;font-size:13px;font-weight:600;box-shadow:var(--shadow-lg)}body.pending #pend{display:block}
+
+.sh-edit{min-height:90px;outline:none;line-height:1.55;white-space:pre-wrap}.sh-edit:empty::before{content:attr(data-ph);color:#9ca3af}
+@media print{.sh-edit:empty::before{content:''}}

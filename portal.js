@@ -28,6 +28,7 @@ const workouts = () => D.logs.filter((l) => l.kind === 'workout');
 const checkins = () => D.logs.filter((l) => l.kind === 'checkin');
 const thumb = (e) => (e?.images?.[0] ? `<img class="th" loading="lazy" src="${e.images[0]}" alt="" onerror="this.remove()">` : `<span class="th ph">${esc((e?.name || '?')[0])}</span>`);
 const first = (n) => String(n || '').split(' ')[0];
+const safeUrl = (u) => (/^https?:\/\//i.test(String(u || '')) ? u : '');
 
 function itemText(it) {
   const f = food(it.id); if (!f) return '?';
@@ -37,6 +38,15 @@ function itemText(it) {
 const itemKcal = (it) => { const f = food(it.id); return f ? f.kcal * it.g / 100 : 0; };
 const parseRest = (s) => { const m = String(s || '').match(/(\d+)/); if (!m) return 60; const n = +m[1]; return /min/i.test(s) ? n * 60 : n; };
 const lastSets = (exId) => { for (const w of workouts()) { const e = (w.data.entries || []).find((x) => x.exId === exId); if (e && e.sets?.length) return e.sets; } return null; };
+// Progresión doble: si en todas las series llegó al tope de repeticiones con peso, sugiere subir carga
+const repTop = (r) => { const t = String(r || ''); if (/(^|[^a-z])s([^a-z]|$)|seg|min/i.test(t)) return null; const n = (t.match(/\d+/g) || []).map(Number); return n.length ? Math.max(...n) : null; };
+const suggest = (it) => {
+  const last = lastSets(it.exId), top = repTop(it.reps); if (!last || !top) return null;
+  const kgs = last.map((s) => +s.kg || 0), reps = last.map((s) => +s.reps || 0), max = Math.max(...kgs);
+  if (!max || last.length < Math.min(+it.sets || 3, 3) || !reps.every((r) => r >= top)) return null;
+  const inc = Math.min(5, Math.max(1.25, Math.round(max * 0.05 / 1.25) * 1.25));
+  return { kg: Math.round((max + inc) * 100) / 100, from: max, top };
+};
 const nextDayIdx = () => {
   const days = D.routine?.days || []; if (!days.length) return 0;
   const w = workouts()[0]; if (!w) return 0;
@@ -126,8 +136,8 @@ function render() {
 function openRun(di, saved) {
   const d = D.routine.days[di];
   run = { day: d, start: Date.now(), entries: d.items.map((it) => {
-    const last = lastSets(it.exId);
-    return { it, sets: Array.from({ length: Math.max(1, +it.sets || 3) }, (_, i) => ({ kg: last?.[i]?.kg ?? last?.at(-1)?.kg ?? '', reps: last?.[i]?.reps ?? '', done: false })) };
+    const last = lastSets(it.exId), sug = suggest(it);
+    return { it, sug, sets: Array.from({ length: Math.max(1, +it.sets || 3) }, (_, i) => ({ kg: sug ? sug.kg : (last?.[i]?.kg ?? last?.at(-1)?.kg ?? ''), reps: sug ? '' : (last?.[i]?.reps ?? ''), done: false })) };
   }) };
   run.di = di;
   if (saved && saved.sets?.length === run.entries.length) { run.start = saved.start; run.entries.forEach((en, i) => { en.sets = saved.sets[i]; }); }
@@ -138,7 +148,7 @@ const tickClock = () => { const el = $('#clk'); if (el && run) { const s = Math.
 function drawRun() {
   const sh = $('#sheet'); sh.hidden = false; document.body.style.overflow = 'hidden';
   sh.innerHTML = `<div class="shead"><button class="sm ghost" data-act="runclose">✕</button><h2>${esc(run.day.name)}</h2><span class="clock" id="clk">00:00</span></div>
-  ${run.entries.map((en, ei) => { const e = ex(en.it.exId), last = lastSets(en.it.exId), all = en.sets.every((s) => s.done); return `<div class="wex ${all ? 'done' : ''}"><div class="im" data-act="exinfo" data-id="${en.it.exId}">${e?.images?.[0] ? `<img src="${e.images[0]}" alt="" onerror="this.remove()">` : `<span class="th ph">${esc((e?.name || '?')[0])}</span>`}<div class="t"><b>${en.it.sup ? `<span class="tag">${esc(en.it.sup)}</span> ` : ''}${esc(e?.name || '—')}</b><small>${en.it.sets} × ${esc(en.it.reps)} · descanso ${esc(en.it.rest)}${en.it.note ? ' · ' + esc(en.it.note) : ''}</small></div><span class="mute">ⓘ</span></div>
+  ${run.entries.map((en, ei) => { const e = ex(en.it.exId), last = lastSets(en.it.exId), all = en.sets.every((s) => s.done); return `<div class="wex ${all ? 'done' : ''}"><div class="im" data-act="exinfo" data-id="${en.it.exId}">${e?.images?.[0] ? `<img src="${e.images[0]}" alt="" onerror="this.remove()">` : `<span class="th ph">${esc((e?.name || '?')[0])}</span>`}<div class="t"><b>${en.it.sup ? `<span class="tag">${esc(en.it.sup)}</span> ` : ''}${esc(e?.name || '—')}</b><small>${en.it.sets} × ${esc(en.it.reps)} · descanso ${esc(en.it.rest)}${en.it.note ? ' · ' + esc(en.it.note) : ''}</small>${en.sug ? `<small class="up">↑ Sube a ${en.sug.kg} kg: completaste ${en.sug.top} reps con ${en.sug.from} kg</small>` : ''}</div><span class="mute">ⓘ</span></div>
     <div class="sets"><div class="shd"><span>Serie</span><span>Kg</span><span>Reps</span><span></span></div>${en.sets.map((s, si) => `<div class="srow ${s.done ? 'done' : ''}"><span class="n">${si + 1}</span><input inputmode="decimal" placeholder="kg" value="${esc(s.kg)}" data-e="${ei}" data-s="${si}" data-f="kg"><input inputmode="numeric" placeholder="${esc(String(en.it.reps).split('-')[0].replace(/\D/g, '') || 'reps')}" value="${esc(s.reps)}" data-e="${ei}" data-s="${si}" data-f="reps"><button class="ok" data-act="setdone" data-e="${ei}" data-s="${si}">${s.done ? '✓' : ''}</button></div>`).join('')}
     ${last ? `<div class="prev">Última vez: ${last.map((s) => `${s.kg || '–'}×${s.reps || '–'}`).join(' · ')}</div>` : ''}</div></div>`; }).join('')}
   <div class="fin"><div><button class="pri block" data-act="finish">Terminar entrenamiento</button></div></div><div id="restbox"></div>`;
@@ -157,7 +167,7 @@ function modal(html) { const m = document.createElement('div'); m.className = 'm
 const closeModal = () => $('#modal')?.remove();
 function exInfo(id) {
   const e = ex(id); if (!e) return;
-  modal(`<h2>${esc(e.name)}</h2><p class="mute small">${esc(e.muscle)}</p>${e.images?.length ? `<div class="imgs">${e.images.map((u) => `<img src="${u}" alt="" onerror="this.remove()">`).join('')}</div>` : ''}<h3>Cómo se hace</h3><p>${esc(e.desc)}</p><h3>Puntos clave</h3><p class="mute">${esc(e.cues)}</p><div class="kpis" style="grid-template-columns:1fr 1fr"><div class="kpi"><small>Más fácil</small><br>${esc(e.regress)}</div><div class="kpi"><small>Más difícil</small><br>${esc(e.progress)}</div></div>${e.video ? `<p><a href="${esc(e.video)}" target="_blank">▶ Ver video</a></p>` : ''}<button class="block" style="margin-top:14px" data-act="closemodal">Cerrar</button>`);
+  modal(`<h2>${esc(e.name)}</h2><p class="mute small">${esc(e.muscle)}</p>${e.images?.length ? `<div class="imgs">${e.images.map((u) => `<img src="${u}" alt="" onerror="this.remove()">`).join('')}</div>` : ''}<h3>Cómo se hace</h3><p>${esc(e.desc)}</p><h3>Puntos clave</h3><p class="mute">${esc(e.cues)}</p><div class="kpis" style="grid-template-columns:1fr 1fr"><div class="kpi"><small>Más fácil</small><br>${esc(e.regress)}</div><div class="kpi"><small>Más difícil</small><br>${esc(e.progress)}</div></div>${safeUrl(e.video) ? `<p><a href="${esc(safeUrl(e.video))}" target="_blank" rel="noopener noreferrer">▶ Ver video</a></p>` : ''}<button class="block" style="margin-top:14px" data-act="closemodal">Cerrar</button>`);
 }
 const pills = (name, n = 5, sel = 4) => `<div class="pills" data-pills="${name}">${Array.from({ length: n }, (_, i) => `<div class="pill ${i + 1 === sel ? 'on' : ''}" data-v="${i + 1}">${i + 1}</div>`).join('')}</div>`;
 function checkinForm() {

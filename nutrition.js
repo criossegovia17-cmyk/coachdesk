@@ -271,7 +271,7 @@ function buildMeal(share, T0, kind, dayIdx, mealIdx, excluded) {
   const items = [];
   for (const key of ['pro', 'carb', 'carb2', 'fruit', 'fat', 'veg']) {
     const f = slots[key]; if (!f || g[key] < 8) continue;
-    const cap = key === 'pro' ? 280 : key === 'veg' ? 200 : 700 / (f.kcal / 100); // tope por porción
+    const cap = key === 'pro' ? 280 : key === 'veg' ? 200 : f.cat === 'bebida' ? 500 : 700 / (f.kcal / 100); // tope por porción
     items.push({ id: f.id, g: key === 'veg' ? Math.round(g[key]) : snapG(f, Math.min(g[key], cap)) });
   }
   return items;
@@ -286,7 +286,7 @@ export function fitDay(day, targetKcal) {
     const base = adj.reduce((a, it) => a + itemMacros(it).kcal, 0);
     if (!base) return;
     const k = Math.min(1.5, Math.max(0.6, 1 + diff / base));
-    adj.forEach((it) => { it.g = snapG(food(it.id), it.g * k); });
+    adj.forEach((it) => { const f = food(it.id); it.g = snapG(f, Math.min(it.g * k, f.cat === 'bebida' ? 500 : 700 / (f.kcal / 100))); });
   }
 }
 

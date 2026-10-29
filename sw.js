@@ -1,5 +1,5 @@
 // Service worker del portal: guarda lo necesario para abrir el plan sin conexión (gimnasio sin señal).
-const CACHE = 'clab-portal-v2';
+const CACHE = 'clab-portal-v3';
 const SHELL = ['portal.html', 'portal.css', 'portal.js', 'logo-mark.svg', 'manifest.webmanifest'];
 const mine = (u) => u.origin === location.origin && /(portal\.(html|js|css)|logo-mark\.svg|manifest\.webmanifest)$/.test(u.pathname);
 

@@ -29,6 +29,43 @@ export function make(x) {
   const newToken = () => { const a = new Uint8Array(24); crypto.getRandomValues(a); return btoa(String.fromCharCode(...a)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
 
   // ---------- helpers de análisis ----------
+  const repTop = (r) => { const t = String(r || ''); if (/(^|[^a-z])s([^a-z]|$)|seg|min/i.test(t)) return null; const n = (t.match(/[0-9]+/g) || []).map(Number); return n.length ? Math.max(...n) : null; };
+  function readyToProgress(c) {
+    const r = x.S.routines.find((q) => q.id === c.routineId); if (!r) return [];
+    const seen = new Set(), out = [], wl = clogs(c, 'workout');
+    r.days.forEach((d) => d.items.forEach((it) => {
+      if (seen.has(it.exId)) return; seen.add(it.exId);
+      const top = repTop(it.reps); if (!top) return;
+      for (const w of wl) {
+        const en = (w.data.entries || []).find((e) => e.exId === it.exId);
+        if (en && en.sets?.length) {
+          const kgs = en.sets.map((s) => +s.kg || 0), reps = en.sets.map((s) => +s.reps || 0), max = Math.max(...kgs);
+          if (max && en.sets.length >= Math.min(+it.sets || 3, 3) && reps.every((v) => v >= top)) { const inc = Math.min(5, Math.max(1.25, Math.round(max * 0.05 / 1.25) * 1.25)); out.push({ name: en.name || x.ex(it.exId)?.name || '', from: max, to: Math.round((max + inc) * 100) / 100, top }); }
+          break;
+        }
+      }
+    }));
+    return out;
+  }
+  function muscleVolume(c) {
+    const since = Date.now() - 7 * 864e5, m = {};
+    clogs(c, 'workout').filter((w) => new Date(w.created_at) >= since).forEach((w) => (w.data.entries || []).forEach((en) => { const mu = x.ex(en.exId)?.muscle; if (!mu) return; const n = (en.sets || []).filter((s) => +s.reps > 0).length; if (n) m[mu] = (m[mu] || 0) + n; }));
+    return m;
+  }
+  // Señales de que un cliente se puede perder
+  function riskInfo(c) {
+    const reasons = [], hasPortal = !!links[c.id], w = clogs(c, 'workout')[0], t = x.today();
+    if (hasPortal) {
+      if (!w) reasons.push('aún no registra entrenamientos');
+      else { const d = Math.floor((Date.now() - new Date(w.created_at)) / 864e5); if (d >= 7) reasons.push(`${d} días sin entrenar`); }
+    }
+    if (x.S.payments.some((p) => p.clientId === c.id && p.status !== 'pagado' && p.due < t)) reasons.push('pago vencido');
+    if (x.S.appointments.filter((a) => a.status === 'no vino' && x.apptIds(a).includes(c.id) && Math.floor((Date.now() - new Date(a.date + 'T12:00')) / 864e5) <= 30).length >= 2) reasons.push('faltó 2 o más veces este mes');
+    if (typeof c.credits === 'number' && c.credits <= 1) reasons.push(c.credits === 0 ? 'sin sesiones en su paquete' : '1 sesión restante');
+    const lastDone = x.S.appointments.filter((a) => a.status === 'realizada' && x.apptIds(a).includes(c.id)).map((a) => a.date).sort().at(-1);
+    if (!hasPortal && lastDone && Math.floor((Date.now() - new Date(lastDone + 'T12:00')) / 864e5) >= 21) reasons.push('3 semanas sin sesión');
+    return reasons;
+  }
   const clogs = (c, kind) => logs.filter((l) => l.client_id === c.id && (!kind || l.kind === kind));
   function strength(c) {
     const by = {};
@@ -95,6 +132,8 @@ export function make(x) {
       : `<div class="bar">${btn('Activar portal', 'portal-on', `data-id="${c.id}"`, 'zap', 'pri')}</div>`}</section>
     <div class="cols"><section class="card"><h3>Constancia (últimas 4 semanas)</h3><div class="wbars">${wb.map((b) => `<div><i style="height:${Math.max(6, b.n / mx * 100)}%"><em>${b.n}</em></i><small>${esc(b.label)}</small></div>`).join('')}</div></section>
       <section class="card"><h3>Fuerza (1RM estimado)</h3>${st.length ? st.map((q) => { const v = q.pts.map((p) => p.v), diff = v.at(-1) - v[0]; return `<div class="str"><div class="sn"><b>${esc(q.name)}</b><small>${v.at(-1)} kg${v.length > 1 ? ` · ${diff >= 0 ? '+' : ''}${Math.round(diff * 10) / 10} kg` : ''}</small></div>${spark(v)}</div>`; }).join('') : '<p class="mute">Cuando tu cliente registre series con peso, verás su progreso de fuerza aquí.</p>'}</section></div>
+    ${(() => { const rp = readyToProgress(c), mv = muscleVolume(c); return `<div class="cols"><section class="card"><h3>Listos para subir carga</h3>${rp.length ? rp.map((q) => `<div class="li"><span><b style="min-width:0">${esc(q.name)}</b><br><span class="mute small">completó ${q.top} reps en todas las series con ${q.from} kg</span></span><span class="tag ok">→ ${q.to} kg</span></div>`).join('') : '<p class="mute">Cuando tu cliente complete todas las repeticiones objetivo con el mismo peso, te sugerimos subirlo (progresión doble).</p>'}</section>
+      <section class="card"><h3>Series por músculo · últimos 7 días</h3>${Object.keys(mv).length ? `<div class="chips">${Object.entries(mv).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span class="chip ${v >= 10 && v <= 20 ? 'ok' : ''}">${esc(k)} <b>${v}</b></span>`).join('')}</div><small class="mute">Rango práctico para hipertrofia: 10–20 series por músculo por semana.</small>` : '<p class="mute">Sin series registradas esta semana.</p>'}</section></div>`; })()}
     <section class="card"><div class="row sp"><h3>Actividad reciente</h3>${btn('Enviar mensaje', 'log-msg', `data-id="${c.id}"`, 'chat', 'sm')}</div>${feed.slice(0, 15).map(feedItem).join('') || '<p class="mute">Aún no hay actividad. Activa el portal y comparte el enlace.</p>'}</section>`;
   }
 
@@ -154,5 +193,5 @@ export function make(x) {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && x.user()) refresh(true); });
   setInterval(() => { if (document.visibilityState === 'visible' && x.user()) refresh(true); }, 90000);
 
-  return { V, ACT, activityTab, photosSection, hydrate, refresh, logs, links, link, clogs };
+  return { V, ACT, activityTab, photosSection, hydrate, refresh, logs, links, link, clogs, strength, weekBars, riskInfo, photos };
 }

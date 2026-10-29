@@ -1,19 +1,19 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-import { demo } from './seed.js?v=16';
-import { exercises as LIB, mergeLibrary, LIB_VERSION } from './library.js?v=16';
-import { plan as rulesPlan } from './planner.js?v=16';
-import { generateProgram } from './program.js?v=16';
-import { latestWeight, RESTRICTIONS, ACTIVITY, mergeFoods, setFoods, FOODS, itemsText, mealTotals } from './nutrition.js?v=16';
-import { logoMark, logoFull } from './brand.js?v=16';
-import * as calendarMod from './calendar.js?v=16';
-import * as builderMod from './builder.js?v=16';
-import * as dietMod from './diet.js?v=16';
-import * as sheetsMod from './sheets.js?v=16';
-import * as activityMod from './activity.js?v=16';
-import * as liveMod from './live.js?v=16';
-import * as toolsMod from './tools.js?v=16';
-import * as catalogMod from './catalog.js?v=16';
-import { CLAB } from './config.js?v=16';
+import { demo } from './seed.js?v=17';
+import { exercises as LIB, mergeLibrary, LIB_VERSION } from './library.js?v=17';
+import { plan as rulesPlan } from './planner.js?v=17';
+import { generateProgram } from './program.js?v=17';
+import { latestWeight, RESTRICTIONS, ACTIVITY, mergeFoods, setFoods, FOODS, itemsText, mealTotals } from './nutrition.js?v=17';
+import { logoMark, logoFull } from './brand.js?v=17';
+import * as calendarMod from './calendar.js?v=17';
+import * as builderMod from './builder.js?v=17';
+import * as dietMod from './diet.js?v=17';
+import * as sheetsMod from './sheets.js?v=17';
+import * as activityMod from './activity.js?v=17';
+import * as liveMod from './live.js?v=17';
+import * as toolsMod from './tools.js?v=17';
+import * as catalogMod from './catalog.js?v=17';
+import { CLAB } from './config.js?v=17';
 
 const SB_URL = 'https://qqgdbdbdfecppehwyezm.supabase.co';
 const SB_KEY = 'sb_publishable_ljrk5vR6YAvpHs68RehEYw_mLclqIcu';
@@ -53,7 +53,10 @@ const del = (col, id) => { S[col] = S[col].filter((x) => x.id !== id); };
 const proActive = () => SUB && SUB.plan === 'pro' && SUB.status === 'active';
 const trialLeft = () => (SUB ? Math.ceil((new Date(SUB.trial_ends_at) - Date.now()) / 864e5) : 99);
 const locked = () => CLAB.enforce && SUB && !proActive() && trialLeft() <= 0;
-let SERVER_TS = null, CONFLICT = false;
+let SERVER_TS = null, CONFLICT = false, PENDING = false, retryT = null;
+function setPending(on) { PENDING = on; document.body.classList.toggle('pending', on); }
+window.addEventListener('online', () => { if (PENDING) flush(); });
+window.addEventListener('beforeunload', (e) => { if (PENDING) { e.preventDefault(); e.returnValue = ''; } });
 const flush = async (force) => {
   tmr = null; if (CONFLICT && !force) return;
   if (locked()) { if (!window.__lockedShown) { window.__lockedShown = true; toast('Tu prueba terminó: la cuenta está en solo lectura'); } return; }
@@ -61,9 +64,13 @@ const flush = async (force) => {
     const { data: cur } = await sb.from('coach_data').select('updated_at').eq('user_id', USER.id).maybeSingle();
     if (cur && cur.updated_at !== SERVER_TS) { CONFLICT = true; showConflict(); return; }
   }
-  const { data, error } = await sb.from('coach_data').upsert({ user_id: USER.id, data: S, updated_at: new Date().toISOString() }).select('updated_at').single();
-  if (error) return toast('Error al guardar: ' + error.message);
-  SERVER_TS = data.updated_at; CONFLICT = false;
+  let res;
+  try { res = await sb.from('coach_data').upsert({ user_id: USER.id, data: S, updated_at: new Date().toISOString() }).select('updated_at').single(); } catch (e) { res = { error: { message: String(e) } }; }
+  if (res.error) {
+    if (/fetch|network|Failed|Load failed|timeout/i.test(res.error.message)) { setPending(true); clearTimeout(retryT); retryT = setTimeout(() => flush(), 15000); return; }
+    return toast('Error al guardar: ' + res.error.message);
+  }
+  SERVER_TS = res.data.updated_at; CONFLICT = false; setPending(false);
 };
 function showConflict() {
   const m = $('#modal'); m.hidden = false;
@@ -76,6 +83,7 @@ const closeModal = () => { $('#modal').hidden = true; $('#modal').innerHTML = ''
 const copy = async (txt) => { try { await navigator.clipboard.writeText(txt); toast('Copiado ✓'); } catch { prompt('Copia el texto:', txt); } };
 const opts = (list, sel) => list.map(([a, b]) => `<option value="${esc(a)}" ${String(a) === String(sel) ? 'selected' : ''}>${esc(b)}</option>`).join('');
 const plain = (arr) => arr.map((x) => [x, x]);
+const safeUrl = (u) => (/^https?:\/\//i.test(String(u || '')) ? u : '');
 function setPath(o, path, v) { const k = path.split('.'); const last = k.pop(); for (const p of k) o = o[p]; o[last] = v; }
 
 // ---------- Iconos ----------
@@ -197,7 +205,7 @@ V.home = () => {
         ${todays.length ? todays.map((a) => `<div class="tl t-${a.type}"><b>${a.time}</b><div><span>${esc(apptWho(a))}</span><small>${a.duration || 60} min · ${a.type}${a.notes ? ' · ' + esc(a.notes) : ''}</small></div><span class="tag ${a.status === 'realizada' ? 'ok' : a.status === 'programada' ? '' : 'bad'}">${a.status}</span></div>`).join('') : '<p class="mute empty">No hay citas para hoy.</p>'}</section>
       <section class="card"><h3>Ingresos · últimos 6 meses</h3><div class="chart2"><div class="grid-l">${[1, 0.75, 0.5, 0.25, 0].map((f) => `<div style="bottom:${f * 100}%"><span>${short(Math.round(top * f))}</span></div>`).join('')}</div>
         <div class="bars">${inc.map((v, i) => `<div class="cb"><i style="height:${(v / top) * 100}%" title="${money(v)}"><em>${v ? short(v) : ''}</em></i><small>${new Date(months[i] + '-15').toLocaleDateString('es-MX', { month: 'short' })}</small></div>`).join('')}</div></div></section></div>
-    ${activityCard()}<div class="cols wide2"><section class="card"><h3>Atención requerida</h3>${alerts.length ? alerts.slice(0, 7).map((a) => `<a class="al ${a[0]}" href="${a[2]}">${ic(a[0] === 'info' ? 'clip' : 'alert', 16)}<span>${a[1]}</span></a>`).join('') : '<p class="mute empty">Todo en orden 🎉</p>'}</section>
+    ${riskCard()}${activityCard()}<div class="cols wide2"><section class="card"><h3>Atención requerida</h3>${alerts.length ? alerts.slice(0, 7).map((a) => `<a class="al ${a[0]}" href="${a[2]}">${ic(a[0] === 'info' ? 'clip' : 'alert', 16)}<span>${a[1]}</span></a>`).join('') : '<p class="mute empty">Todo en orden 🎉</p>'}</section>
       <section class="card hero"><div><h3>✨ Entrenamiento grupal con IA</h3><p>Elige a los clientes de una sesión y genera un circuito donde todos participan, adaptado a nivel y lesiones de cada uno, con el tiempo de atención que merece cada cliente.</p></div>${btn('Crear sesión grupal', 'go', 'data-to="#/entrenar"', 'zap', 'pri')}</section></div>`);
 };
 
@@ -259,7 +267,7 @@ V.cliente = (id) => {
       <p><b>Grupos:</b> ${gs.map((g) => `<span class="tag">${esc(g.name)}</span>`).join('') || '—'}</p>
       <p><b>Último check-in:</b> ${lc ? `${fdate(lc.date)} · adherencia ${lc.adherence}/5 · energía ${lc.energy}/5` : '—'}</p>
       <h3 style="margin-top:12px">Próximas citas</h3>${ap.map((a) => `<div class="li"><b>${fdate(a.date)} ${a.time}</b><span class="tag">${a.type}</span></div>`).join('') || '<span class="mute">Ninguna</span>'}</section></div>
-      <div class="bar">${c.phone ? `<a class="btn" target="_blank" href="https://wa.me/${c.phone.replace(/\D/g, '')}">${ic('chat', 16)}WhatsApp</a>` : ''}<a class="btn" href="#/hoja/${c.id}">${ic('print', 16)}Plan PDF</a>${btn('Portal del cliente', 'tab', 'data-k="cliente" data-v="actividad"', 'zap')}<span class="grow"></span>${btn('Eliminar cliente', 'client-del', `data-id="${c.id}"`, 'trash', 'del')}</div>`;
+      <div class="bar">${c.phone ? `<a class="btn" target="_blank" href="https://wa.me/${c.phone.replace(/\D/g, '')}">${ic('chat', 16)}WhatsApp</a>` : ''}<a class="btn" href="#/hoja/${c.id}">${ic('print', 16)}Plan PDF</a><a class="btn" href="#/reporte/${c.id}">${ic('clip', 16)}Reporte mensual</a>${btn('Portal del cliente', 'tab', 'data-k="cliente" data-v="actividad"', 'zap')}<span class="grow"></span>${btn('Eliminar cliente', 'client-del', `data-id="${c.id}"`, 'trash', 'del')}</div>`;
   } else if (t === 'actividad') {
     body = mods.activity.activityTab(c);
   } else if (t === 'programa') {
@@ -536,7 +544,7 @@ const ACT = {
       <h3>Cómo se hace</h3><p>${esc(e.desc)}</p><h3>Puntos clave</h3><p class="tags">${esc(e.cues).split(' · ').map((x) => `<span class="tag">${x}</span>`).join('')}</p>
       <div class="two"><div class="card"><b>Más fácil</b><br>${esc(e.regress)}</div><div class="card"><b>Más difícil</b><br>${esc(e.progress)}</div></div>
       ${e.avoid.length ? `<p>Precaución si hay: ${e.avoid.map((a) => `<span class="tag bad">${esc(a)}</span>`).join('')}</p>` : ''}
-      <p class="bar"><a class="btn" target="_blank" href="${esc(e.video || yt)}">▶ ${e.video ? 'Ver video' : 'Buscar video de ejemplo'}</a>${btn('Editar', 'ex-edit', `data-id="${e.id}"`, 'edit')}</p>`, true);
+      <p class="bar"><a class="btn" target="_blank" href="${esc(safeUrl(e.video) || yt)}" rel="noopener noreferrer">▶ ${safeUrl(e.video) ? 'Ver video' : 'Buscar video de ejemplo'}</a>${btn('Editar', 'ex-edit', `data-id="${e.id}"`, 'edit')}</p>`, true);
   },
   async 'ex-new'() { const v = await form('Nuevo ejercicio', exFields(), { pattern: 'sentadilla', muscle: 'cuádriceps', level: 'intermedio', type: 'fuerza', equip: ['peso corporal'], avoid: [], tags: ['general'] }); if (v) { S.exercises.push({ id: uid('x'), ...v, images: [], custom: true }); save(); render(); } },
   async 'ex-edit'(el) { closeModal(); const e = ex(el.dataset.id); const v = await form('Editar ejercicio', exFields(), e); if (v) { Object.assign(e, v, { custom: true }); save(); render(); } },
@@ -678,6 +686,14 @@ function onboarding() {
   const done = steps.filter((q) => q[1]).length; if (done === steps.length) return '';
   return `<section class="card onb"><div class="row sp"><div class="grow"><h3>Primeros pasos · ${done}/${steps.length}</h3><div class="meter"><i style="width:${done / steps.length * 100}%"></i></div></div>${btn('Ocultar', 'onb-hide', '', '', 'sm')}</div><div class="onbg">${steps.map(([l, ok, h]) => `<a class="onbs ${ok ? 'ok' : ''}" href="${h}"><span>${ok ? '✓' : ''}</span>${l}</a>`).join('')}</div></section>`;
 }
+function riskCard() {
+  const list = S.clients.filter((c) => c.active).map((c) => ({ c, r: mods.activity.riskInfo(c) })).filter((q) => q.r.length).sort((a, b) => b.r.length - a.r.length).slice(0, 5);
+  if (!list.length) return '';
+  return `<section class="card"><div class="row sp"><h3>Clientes en riesgo de abandonar</h3><span class="mute small">Para escribirles a tiempo</span></div>${list.map(({ c, r }) => {
+    const msg = encodeURIComponent(`Hola ${c.name.split(' ')[0]}, ¿cómo vas? Te extrañamos por aquí. Cuéntame si necesitas ajustar algo de tu plan o tu horario. 💪`);
+    return `<div class="li"><span>${avatar(c.name)}</span><span><b style="min-width:0"><a href="#/cliente/${c.id}">${esc(c.name)}</a></b><br><span class="mute small">${r.map(esc).join(' · ')}</span></span>${c.phone ? `<a class="btn sm" target="_blank" href="https://wa.me/${c.phone.replace(/\D/g, '')}?text=${msg}">${ic('chat', 14)}Escribir</a>` : ''}</div>`;
+  }).join('')}</section>`;
+}
 function activityCard() {
   const L = mods.activity.logs.filter((l) => l.kind !== 'message' || l.data.from === 'client').slice(0, 6), nu = mods.activity.logs.filter((l) => !l.handled).length;
   const txt = (l) => ({ workout: `completó ${esc(l.data.dayName || 'un entrenamiento')}`, checkin: `envió su check-in (adh ${l.data.adherence}/5)`, intake: 'llenó su ficha inicial', message: `te escribió: “${esc(String(l.data.text || '').slice(0, 50))}”` }[l.kind]);
@@ -726,11 +742,25 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('input', (e) => { if (e.target.id === 'sq') { ui.sIdx = 0; drawSearch(e.target.value); } });
 
+// ---------- Deshacer ----------
+let UNDO = null;
+const UNDOABLE = { 'client-del': 'Cliente eliminado', 'routine-del': 'Rutina eliminada', 'diet-del': 'Dieta eliminada', 'appt-del': 'Cita eliminada', 'pay-del': 'Pago eliminado', 'group-del': 'Grupo eliminado', 'rday-del': 'Día quitado', 'ritem-del': 'Ejercicio quitado', 'meal-del': 'Comida quitada', 'fi-del': 'Alimento quitado', 'measure-del': 'Medida eliminada', 'checkin-del': 'Check-in eliminado', 'dday-del': 'Día quitado' };
+function offerUndo(label) {
+  const t = $('#toast'); t.innerHTML = `${esc(label)} <button class="tu" data-act="undo">Deshacer</button>`; t.hidden = false;
+  clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), 9000);
+}
+ACT.undo = () => { if (!UNDO) return; S = JSON.parse(UNDO); UNDO = null; migrate(); save(); render(); toast('Restaurado ✓'); };
+
 // ---------- Módulos ----------
 const ctx = { sb, user: () => USER, onDone, ui, esc, ic, btn, page, thumb, avatar, form, dialog, closeModal, save, render, renderMain, toast, today, fdate, money, uid, cl, ex, find, del, plain, opts, copy, $, PATTERNS, GROUPS, TYPES, LEVELS, EQUIP, TRACK_NAME, apptFields, addAppt, apptWho, apptIds, apptSort };
 Object.defineProperty(ctx, 'S', { get: () => S });
+Object.defineProperty(ctx, 'mods', { get: () => mods });
 const mods = { calendar: calendarMod.make(ctx), builder: builderMod.make(ctx), diet: dietMod.make(ctx), sheets: sheetsMod.make(ctx), activity: activityMod.make(ctx), live: liveMod.make(ctx), tools: toolsMod.make(ctx), catalog: catalogMod.make(ctx) };
 Object.values(mods).forEach((m) => { Object.assign(V, m.V); Object.assign(ACT, m.ACT); });
+Object.entries(UNDOABLE).forEach(([k, label]) => {
+  const f = ACT[k]; if (!f) return;
+  ACT[k] = async (el) => { const before = JSON.stringify(S); await f(el); if (JSON.stringify(S) !== before) { UNDO = before; offerUndo(label); } };
+});
 
 // ---------- Tema ----------
 const THEMES = ['auto', 'light', 'dark'];
@@ -758,7 +788,7 @@ function render() {
   if (seg === 'rutinas') seg = 'entrenamientos'; if (seg === 'dietas') seg = 'nutricion';
   const name = seg || 'home';
   renderMain();
-  const base = { cliente: 'clientes', rutina: 'entrenamientos', dieta: 'nutricion', hoja: 'clientes', hojar: 'entrenamientos', hojad: 'nutricion', recibo: 'pagos' }[name] || name;
+  const base = { cliente: 'clientes', rutina: 'entrenamientos', dieta: 'nutricion', hoja: 'clientes', hojar: 'entrenamientos', hojad: 'nutricion', recibo: 'pagos', reporte: 'clientes' }[name] || name;
   $('#nav').innerHTML = `<div class="brand">${logoFull(38)}</div><button class="navsearch" data-act="search">${ic('search', 15)}<span>Buscar…</span><kbd>Ctrl K</kbd></button>` + NAV.map(([sec, items]) => `<div class="ns">${sec}</div>` + items.map(([h, l, i]) => `<a href="${h}" class="${h === '#/' + (base === 'home' ? '' : base) ? 'on' : ''}">${ic(i)}<span>${l}</span></a>`).join('')).join('') + `<div class="who"><span class="av sm" style="--h:${hue(USER.email)}">${esc(initials(S.settings?.brand || USER.email))}</span><div><b>${esc(S.settings?.brand || 'Mi cuenta')}</b><small>${esc(USER.email)}</small></div><button data-act="theme" title="Tema: ${getTheme()}">${ic({ auto: 'auto', light: 'sun', dark: 'moon' }[getTheme()], 16)}</button><button data-act="logout" title="Cerrar sesión">${ic('out', 16)}</button></div>`;
   $('#tabbar').innerHTML = [['#/', 'Inicio', 'home'], ['#/clientes', 'Clientes', 'users'], ['#/agenda', 'Agenda', 'cal'], ['#/entrenamientos', 'Rutinas', 'clip']].map(([h, l, i]) => `<a href="${h}" class="${h === '#/' + (base === 'home' ? '' : base) ? 'on' : ''}">${ic(i, 22)}<span>${l}</span></a>`).join('') + `<button data-act="menu">${ic('menu', 22)}<span>Más</span></button>`;
   window.scrollTo(0, 0);

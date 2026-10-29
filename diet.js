@@ -1,5 +1,5 @@
 // Nutrición C-Lab: dietas por porciones, alimentos, calculadora del cliente, equivalencias y lista del súper.
-import * as N from './nutrition.js?v=16';
+import * as N from './nutrition.js?v=17';
 
 export function make(x) {
   const { esc, ic, btn, $ } = x;

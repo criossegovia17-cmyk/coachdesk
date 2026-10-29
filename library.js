@@ -3,7 +3,7 @@
 // tipo: F fuerza · P potencia · I isométrico · C core · A cardio · B cuidado del brazo · M movilidad
 // perfiles: g general · b béisbol · h hipertrofia / fisicoculturismo
 export const LIB_VERSION = 2;
-const IMG = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
+const IMG = 'img/ex/'; // copias locales de free-exercise-db (dominio público)
 const TYPE = { F: 'fuerza', P: 'potencia', I: 'isométrico', C: 'core', A: 'cardio', B: 'cuidado del brazo', M: 'movilidad' };
 const LVL = { p: 'principiante', i: 'intermedio', a: 'avanzado' };
 

@@ -1,6 +1,6 @@
 // Hojas imprimibles / PDF: plan de entrenamiento, plan nutricional y plan completo con marca C-Lab.
-import * as N from './nutrition.js?v=16';
-import { logoMark } from './brand.js?v=16';
+import * as N from './nutrition.js?v=17';
+import { logoMark } from './brand.js?v=17';
 
 const SWAPS = [
   ['Proteína · 30 g', 'p', 30, ['pollo', 'res', 'pescado', 'atun', 'huevo', 'claras', 'yogur', 'requeson', 'panela', 'tofu', 'whey']],
@@ -71,6 +71,30 @@ export function make(x) {
       return `${bar('#/dieta/' + d.id)}<article class="sheet">${header('Plan de alimentación', `${c ? 'Preparado para ' + esc(c.name) + ' · ' : ''}${stamp()}`)}${clientCard(c)}${nutrition(d, c, 1)}${foot()}</article>`;
     },
   };
+  function report(c) {
+    const act = x.mods.activity, t = x.today(), since30 = Date.now() - 30 * 864e5;
+    const wk = act.clogs(c, 'workout').filter((w) => new Date(w.created_at) >= since30);
+    const plannedWeek = (x.S.routines.find((r) => r.id === c.routineId)?.days.length) || c.daysPerWeek || 3;
+    const sessions = x.S.appointments.filter((a) => a.status === 'realizada' && a.date >= new Date(since30).toISOString().slice(0, 10) && x.apptIds(a).includes(c.id)).length;
+    const cks = [...(c.checkins || []), ...act.clogs(c, 'checkin').map((l) => ({ adherence: +l.data.adherence, energy: +l.data.energy, date: l.created_at.slice(0, 10) }))].filter((q) => new Date(q.date + 'T12:00') >= since30);
+    const avg = (k) => (cks.length ? (cks.reduce((a, q) => a + (+q[k] || 0), 0) / cks.length).toFixed(1) : '—');
+    const m = [...c.measures].sort((a, b) => a.date.localeCompare(b.date)).filter((q) => new Date(q.date + 'T12:00') >= Date.now() - 90 * 864e5);
+    const delta = (k, u) => { const v = m.filter((q) => q[k] !== '' && q[k] != null).map((q) => +q[k]); if (v.length < 2) return ''; const d = Math.round((v.at(-1) - v[0]) * 10) / 10; return `<tr><td>${{ weight: 'Peso', fat: '% de grasa', waist: 'Cintura', chest: 'Pecho', hip: 'Cadera', arm: 'Brazo', thigh: 'Muslo' }[k]}</td><td class="c">${v[0]} ${u}</td><td class="c">${v.at(-1)} ${u}</td><td class="c"><b>${d > 0 ? '+' : ''}${d} ${u}</b></td></tr>`; };
+    const lifts = act.strength(c).filter((q) => q.pts.length > 1);
+    const ph = act.photos(c);
+    const wvals = m.filter((q) => q.weight !== '' && q.weight != null).map((q) => +q.weight);
+    const spark = wvals.length > 1 ? (() => { const W = 560, H = 90, mn = Math.min(...wvals), mx = Math.max(...wvals), r = mx - mn || 1; const pts = wvals.map((v, i) => `${(i / (wvals.length - 1)) * (W - 20) + 10},${H - 12 - ((v - mn) / r) * (H - 24)}`); return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:90px"><polyline fill="none" stroke="#2350ee" stroke-width="3" stroke-linejoin="round" points="${pts.join(' ')}"/></svg>`; })() : '';
+    const month = new Date().toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+    return `<div class="bar noprint"><a href="#/cliente/${c.id}">${ic('back', 16)} Volver</a><span class="grow"></span><button class="pri" onclick="print()">${ic('print', 16)}Imprimir / Guardar PDF</button></div><p class="noprint mini">Escribe tus comentarios en el recuadro antes de imprimir.</p>
+    <article class="sheet">${header('Reporte de progreso', `${esc(c.name)} · ${month}`)}${clientCard(c)}
+      <section class="sh-s"><h2><span>1</span>Resumen del mes</h2><div class="sh-macros" style="grid-template-columns:repeat(4,1fr)"><div class="m k"><b>${wk.length}</b><small>Entrenos registrados</small></div><div class="m p"><b>${plannedWeek * 4}</b><small>Meta (≈ 4 semanas)</small></div><div class="m c"><b>${sessions}</b><small>Sesiones con tu coach</small></div><div class="m f"><b>${avg('adherence')}/5</b><small>Adherencia · energía ${avg('energy')}/5</small></div></div>
+      ${wk.length ? `<p class="sh-lead" style="margin-top:6px">Cumplimiento del plan: <b>${Math.min(100, Math.round(wk.length / (plannedWeek * 4) * 100))}%</b></p>` : ''}</section>
+      ${m.length > 1 ? `<section class="sh-s"><h2><span>2</span>Cambios corporales (90 días)</h2>${spark}<table class="sh-t1 sm"><thead><tr><th>Medida</th><th>Inicio</th><th>Actual</th><th>Cambio</th></tr></thead><tbody>${[['weight', 'kg'], ['fat', '%'], ['waist', 'cm'], ['chest', 'cm'], ['hip', 'cm'], ['arm', 'cm'], ['thigh', 'cm']].map(([k, u]) => delta(k, u)).join('')}</tbody></table></section>` : ''}
+      ${lifts.length ? `<section class="sh-s"><h2><span>3</span>Fuerza</h2><table class="sh-t1 sm"><thead><tr><th>Ejercicio</th><th>1RM estimado inicial</th><th>Actual</th><th>Cambio</th></tr></thead><tbody>${lifts.map((q) => { const a = q.pts[0].v, b = q.pts.at(-1).v; return `<tr><td>${esc(q.name)}</td><td class="c">${a} kg</td><td class="c">${b} kg</td><td class="c"><b>${b - a >= 0 ? '+' : ''}${Math.round((b - a) * 10) / 10} kg</b></td></tr>`; }).join('')}</tbody></table></section>` : ''}
+      ${ph.length > 1 ? `<section class="sh-s"><h2><span>4</span>Antes y después</h2><div class="two"><figure style="margin:0"><img data-path="${esc(ph[0].path)}" data-pending="1" alt="" style="width:100%;border-radius:10px"><figcaption class="sh-small">${x.fdate(ph[0].date)} · ${esc(ph[0].pose)}</figcaption></figure><figure style="margin:0"><img data-path="${esc(ph.at(-1).path)}" data-pending="1" alt="" style="width:100%;border-radius:10px"><figcaption class="sh-small">${x.fdate(ph.at(-1).date)} · ${esc(ph.at(-1).pose)}</figcaption></figure></div></section>` : ''}
+      <section class="sh-s"><div class="sh-box"><h4>Comentarios de tu entrenador</h4><div contenteditable="true" class="sh-edit" data-ph="Escribe aquí tus observaciones y objetivos para el siguiente mes…"></div></div></section>${foot()}</article>`;
+  }
+  V.reporte = (id) => { const c = x.cl(id); return c ? report(c) : '<p>No encontrado</p>'; };
   const ACT = { 'sheet-type': (el) => { x.ui.sheet = el.dataset.v; x.render(); } };
   return { V, ACT };
 }

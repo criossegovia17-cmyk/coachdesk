@@ -1,4 +1,4 @@
-import { CLAB } from './config.js?v=16';
+import { CLAB } from './config.js?v=17';
 
 // Si ya hay una sesión iniciada, entra directo a la app (usa ?landing para ver esta página igualmente)
 try {
