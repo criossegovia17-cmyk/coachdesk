@@ -51,6 +51,7 @@ export function make(x) {
     const e = x.ex(it.exId), c = clientsOf(r)[0], bad = issues(e || { avoid: [], equip: ['peso corporal'] }, c);
     return `<div class="rb ${bad.length ? 'warn' : ''}"><div class="rb-main">${x.thumb(e)}<div class="rb-name" data-act="rb-swap" data-id="${r.id}" data-d="${di}" data-i="${ii}" title="Cambiar ejercicio"><b>${e ? esc(e.name) : '<span class="mute">Elegir ejercicio…</span>'}</b>
         <small>${e ? `${esc(e.muscle)} · ${esc(e.type || '')}` : 'Toca para elegir de la biblioteca'}${bad.length ? ` · <span class="bad">${bad.join(' ')}</span>` : ''}</small></div></div>
+      <label class="rb-f"><small>Súper</small><input data-path="days.${di}.items.${ii}.sup" value="${esc(it.sup || '')}" placeholder="A1"></label>
       <label class="rb-f"><small>Series</small><input type="number" min="1" data-path="days.${di}.items.${ii}.sets" value="${it.sets}"></label>
       <label class="rb-f"><small>Reps</small><input data-path="days.${di}.items.${ii}.reps" value="${esc(it.reps)}"></label>
       <label class="rb-f"><small>Descanso</small><input data-path="days.${di}.items.${ii}.rest" value="${esc(it.rest)}"></label>

@@ -1,6 +1,6 @@
 // Hojas imprimibles / PDF: plan de entrenamiento, plan nutricional y plan completo con marca C-Lab.
-import * as N from './nutrition.js?v=8';
-import { logoMark } from './brand.js?v=8';
+import * as N from './nutrition.js?v=10';
+import { logoMark } from './brand.js?v=10';
 
 const SWAPS = [
   ['Proteína · 30 g', 'p', 30, ['pollo', 'res', 'pescado', 'atun', 'huevo', 'claras', 'yogur', 'requeson', 'panela', 'tofu', 'whey']],
@@ -23,7 +23,7 @@ export function make(x) {
       ${r.goal ? `<p class="sh-lead">${esc(r.goal)}</p>` : ''}
       ${p ? `<div class="sh-weeks">${p.weeks.map((w) => `<div><b>${esc(w.label)}</b><i>RIR ${esc(w.rir)}</i><small>${esc(w.note)}</small></div>`).join('')}</div>` : ''}
       ${r.days.map((d) => `<div class="sh-day"><h3>${esc(d.name)}</h3><table class="sh-t1"><thead><tr><th>Ejercicio</th><th>Series × reps</th><th>Descanso</th><th>Indicación</th></tr></thead><tbody>
-        ${d.items.map((it) => { const e = x.ex(it.exId); return `<tr><td><div class="sh-ex">${e?.images?.[0] ? `<img src="${e.images[0]}" alt="" onerror="this.remove()">` : '<span class="sh-ph"></span>'}<div><b>${esc(e?.name || '—')}</b><small>${esc(e?.muscle || '')}${e?.cues ? ' · ' + esc(e.cues.split(' · ').slice(0, 2).join(' · ')) : ''}</small></div></div></td><td class="c"><b>${it.sets} × ${esc(it.reps)}</b></td><td class="c">${esc(it.rest)}</td><td>${esc(it.note)}</td></tr>`; }).join('')}</tbody></table></div>`).join('')}
+        ${d.items.map((it) => { const e = x.ex(it.exId); return `<tr><td><div class="sh-ex">${e?.images?.[0] ? `<img src="${e.images[0]}" alt="" onerror="this.remove()">` : '<span class="sh-ph"></span>'}<div><b>${it.sup ? `<span class="sh-sup">${esc(it.sup)}</span> ` : ''}${esc(e?.name || '—')}</b><small>${esc(e?.muscle || '')}${e?.cues ? ' · ' + esc(e.cues.split(' · ').slice(0, 2).join(' · ')) : ''}</small></div></div></td><td class="c"><b>${it.sets} × ${esc(it.reps)}</b></td><td class="c">${esc(it.rest)}</td><td>${esc(it.note)}</td></tr>`; }).join('')}</tbody></table></div>`).join('')}
       <div class="sh-box"><h4>Cómo leer tu rutina</h4><ul><li><b>Series × reps:</b> cuántas veces repites el ejercicio y cuántas series haces.</li><li><b>RIR:</b> repeticiones que te quedan "en reserva". RIR 2 = podrías hacer 2 más con buena técnica.</li><li><b>Descanso:</b> tiempo entre series. Respétalo, sobre todo en ejercicios de fuerza y potencia.</li><li>Si algo duele (no molesta), detente y avisa a tu coach.</li></ul></div>
       ${p?.notes?.length ? `<div class="sh-box"><h4>Notas del programa</h4><ul>${p.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>` : ''}</section>`;
   }

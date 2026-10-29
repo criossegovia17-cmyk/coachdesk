@@ -1,14 +1,15 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-import { demo } from './seed.js?v=8';
-import { exercises as LIB, mergeLibrary, LIB_VERSION } from './library.js?v=8';
-import { plan as rulesPlan } from './planner.js?v=8';
-import { generateProgram } from './program.js?v=8';
-import { latestWeight, RESTRICTIONS, ACTIVITY, mergeFoods, setFoods, FOODS, itemsText, mealTotals } from './nutrition.js?v=8';
-import { logoMark, logoFull } from './brand.js?v=8';
-import * as calendarMod from './calendar.js?v=8';
-import * as builderMod from './builder.js?v=8';
-import * as dietMod from './diet.js?v=8';
-import * as sheetsMod from './sheets.js?v=8';
+import { demo } from './seed.js?v=10';
+import { exercises as LIB, mergeLibrary, LIB_VERSION } from './library.js?v=10';
+import { plan as rulesPlan } from './planner.js?v=10';
+import { generateProgram } from './program.js?v=10';
+import { latestWeight, RESTRICTIONS, ACTIVITY, mergeFoods, setFoods, FOODS, itemsText, mealTotals } from './nutrition.js?v=10';
+import { logoMark, logoFull } from './brand.js?v=10';
+import * as calendarMod from './calendar.js?v=10';
+import * as builderMod from './builder.js?v=10';
+import * as dietMod from './diet.js?v=10';
+import * as sheetsMod from './sheets.js?v=10';
+import * as activityMod from './activity.js?v=10';
 
 const SB_URL = 'https://qqgdbdbdfecppehwyezm.supabase.co';
 const SB_KEY = 'sb_publishable_ljrk5vR6YAvpHs68RehEYw_mLclqIcu';
@@ -20,7 +21,7 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const uid = (p) => p + Math.random().toString(36).slice(2, 8);
 const today = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };
-const money = (n) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n || 0);
+const money = (n) => new Intl.NumberFormat(S?.settings?.currency === 'USD' ? 'en-US' : 'es-MX', { style: 'currency', currency: S?.settings?.currency || 'MXN', maximumFractionDigits: 0 }).format(n || 0);
 const fdate = (s) => (s ? new Date(s + 'T12:00').toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' }) : '—');
 const daysAgo = (s) => Math.floor((Date.now() - new Date(s + 'T12:00').getTime()) / 864e5);
 const initials = (n) => n.split(/\s+/).slice(0, 2).map((x) => x[0]).join('').toUpperCase();
@@ -150,10 +151,15 @@ V.home = () => {
     if (!c.routineId) alerts.push(['info', `${esc(c.name)} no tiene programa asignado`, '#/cliente/' + c.id]);
     if (!lc || daysAgo(lc.date) > 14) alerts.push(['warn', `${esc(c.name)} no tiene check-in en ${lc ? daysAgo(lc.date) + ' días' : 'el sistema'}`, '#/cliente/' + c.id]);
   });
+  active.forEach((c) => { if (typeof c.credits === 'number' && c.credits <= 1) alerts.push(['warn', `${esc(c.name)} tiene ${c.credits} sesión(es) restante(s): ofrece renovar el paquete`, '#/cliente/' + c.id]); });
+  mods.activity.logs.filter((l) => !l.handled).forEach((l) => {
+    if (l.kind === 'checkin' && l.data.pain) alerts.unshift(['bad', `${esc(cl(l.client_id)?.name || 'Cliente')} reportó molestia: ${esc(l.data.pain)}`, '#/cliente/' + l.client_id]);
+    if (l.kind === 'intake') alerts.unshift(['info', `${esc(cl(l.client_id)?.name || 'Cliente')} llenó su ficha inicial: revísala y aplícala`, '#/cliente/' + l.client_id]);
+  });
   const brand = S.settings?.brand;
   const hr = new Date().getHours();
   return page(`${hr < 12 ? 'Buenos días' : hr < 19 ? 'Buenas tardes' : 'Buenas noches'}${brand ? ', ' + esc(brand) : ''}`, new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }), `${btn('Nueva cita', 'cal-new', `data-d="${t}"`, 'cal')}${btn('Nuevo cliente', 'client-new', '', 'plus', 'pri')}`,
-    `<div class="kpis five">
+    `${onboarding()}<div class="kpis five">
       <div class="kpi"><span class="k-ic">${ic('users')}</span><small>Clientes activos</small><b>${active.length}</b></div>
       <div class="kpi"><span class="k-ic g">${ic('dollar')}</span><small>Cobrado este mes</small><b>${money(income)}</b></div>
       <div class="kpi"><span class="k-ic w">${ic('clip')}</span><small>Por cobrar</small><b>${money(pend.reduce((a, p) => a + p.amount, 0))}</b><em>${pend.length} pago(s)</em></div>
@@ -164,7 +170,7 @@ V.home = () => {
         ${todays.length ? todays.map((a) => `<div class="tl t-${a.type}"><b>${a.time}</b><div><span>${esc(apptWho(a))}</span><small>${a.duration || 60} min · ${a.type}${a.notes ? ' · ' + esc(a.notes) : ''}</small></div><span class="tag ${a.status === 'realizada' ? 'ok' : a.status === 'programada' ? '' : 'bad'}">${a.status}</span></div>`).join('') : '<p class="mute empty">No hay citas para hoy.</p>'}</section>
       <section class="card"><h3>Ingresos · últimos 6 meses</h3><div class="chart2"><div class="grid-l">${[1, 0.75, 0.5, 0.25, 0].map((f) => `<div style="bottom:${f * 100}%"><span>${short(Math.round(top * f))}</span></div>`).join('')}</div>
         <div class="bars">${inc.map((v, i) => `<div class="cb"><i style="height:${(v / top) * 100}%" title="${money(v)}"><em>${v ? short(v) : ''}</em></i><small>${new Date(months[i] + '-15').toLocaleDateString('es-MX', { month: 'short' })}</small></div>`).join('')}</div></div></section></div>
-    <div class="cols wide2"><section class="card"><h3>Atención requerida</h3>${alerts.length ? alerts.slice(0, 7).map((a) => `<a class="al ${a[0]}" href="${a[2]}">${ic(a[0] === 'info' ? 'clip' : 'alert', 16)}<span>${a[1]}</span></a>`).join('') : '<p class="mute empty">Todo en orden 🎉</p>'}</section>
+    ${activityCard()}<div class="cols wide2"><section class="card"><h3>Atención requerida</h3>${alerts.length ? alerts.slice(0, 7).map((a) => `<a class="al ${a[0]}" href="${a[2]}">${ic(a[0] === 'info' ? 'clip' : 'alert', 16)}<span>${a[1]}</span></a>`).join('') : '<p class="mute empty">Todo en orden 🎉</p>'}</section>
       <section class="card hero"><div><h3>✨ Entrenamiento grupal con IA</h3><p>Elige a los clientes de una sesión y genera un circuito donde todos participan, adaptado a nivel y lesiones de cada uno, con el tiempo de atención que merece cada cliente.</p></div>${btn('Crear sesión grupal', 'go', 'data-to="#/entrenar"', 'zap', 'pri')}</section></div>`);
 };
 
@@ -205,7 +211,8 @@ const newClientDefaults = () => ({ level: 'principiante', track: 'general', acti
 V.cliente = (id) => {
   const c = cl(id); if (!c) return '<p>Cliente no encontrado.</p>';
   const t = tab.cliente || 'resumen';
-  const tabs = [['resumen', 'Resumen'], ['programa', 'Programa'], ['nutricion', 'Nutrición'], ['progreso', 'Progreso'], ['carpeta', 'Carpeta'], ['pagos', 'Pagos'], ['ficha', 'Ficha de salud']];
+  const nl = (mods.activity.logs || []).filter((l) => l.client_id === c.id && !l.handled && l.kind !== 'message').length;
+  const tabs = [['resumen', 'Resumen'], ['actividad', `Actividad${nl ? ` <span class="badge">${nl}</span>` : ''}`], ['programa', 'Programa'], ['nutricion', 'Nutrición'], ['progreso', 'Progreso'], ['carpeta', 'Carpeta'], ['pagos', 'Pagos'], ['ficha', 'Ficha de salud']];
   const r = S.routines.find((x) => x.id === c.routineId), d = S.diets.find((x) => x.id === c.dietId);
   let body = '';
   if (t === 'resumen') {
@@ -217,7 +224,7 @@ V.cliente = (id) => {
     const lc = lastCheckin(c), w = latestWeight(c);
     body = `<div class="cols"><section class="card"><div class="row sp"><h3>Perfil</h3>${btn('Editar', 'client-edit', `data-id="${c.id}"`, 'edit', 'sm')}</div>
       <dl class="dl"><dt>Objetivo</dt><dd>${esc(c.goal) || '—'}</dd><dt>Tipo</dt><dd>${trackTag(c.track)} ${c.track === 'beisbol' ? `<span class="mute">${esc(c.position || '')} · ${esc(c.season || '')}</span>` : c.track === 'fisicoculturismo' ? `<span class="mute">${esc(c.phase || '')}</span>` : ''}</dd>
-      <dt>Nivel</dt><dd>${c.level}</dd><dt>Días/sem</dt><dd>${c.daysPerWeek || '—'}</dd><dt>Plan</dt><dd>${esc(p?.name || '—')}${p ? ` · <span class="mute">${used}/${p.sessions} sesiones este mes</span>` : ''}</dd><dt>Peso</dt><dd>${w.weight ? w.weight + ' kg' : '—'}</dd><dt>WhatsApp</dt><dd>${esc(c.phone) || '—'}</dd></dl>
+      <dt>Nivel</dt><dd>${c.level}</dd><dt>Días/sem</dt><dd>${c.daysPerWeek || '—'}</dd><dt>Plan</dt><dd>${esc(p?.name || '—')}${p ? ` · <span class="mute">${used}/${p.sessions} sesiones este mes</span>` : ''}</dd><dt>Paquete</dt><dd>${typeof c.credits === 'number' ? `<b>${c.credits}</b> sesión(es) restante(s)` : '<span class="mute">sin paquete</span>'} ${btn('+ sesiones', 'credits-add', `data-id="${c.id}"`, '', 'sm')}</dd><dt>Peso</dt><dd>${w.weight ? w.weight + ' kg' : '—'}</dd><dt>WhatsApp</dt><dd>${esc(c.phone) || '—'}</dd></dl>
       <div class="tags">${c.injuries.map((i) => `<span class="tag bad">⚠ ${esc(i)}</span>`).join('') || '<span class="mute">Sin lesiones registradas</span>'}</div><p class="mute">${esc(c.notes)}</p></section>
       <section class="card"><h3>Asignado</h3>
       <p><b>Programa:</b> ${r ? `<a href="#/rutina/${r.id}">${esc(r.name)}</a>` : '<span class="mute">—</span> ' + btn('Crear', 'tab', 'data-k="cliente" data-v="programa"', '', 'sm')}</p>
@@ -225,7 +232,9 @@ V.cliente = (id) => {
       <p><b>Grupos:</b> ${gs.map((g) => `<span class="tag">${esc(g.name)}</span>`).join('') || '—'}</p>
       <p><b>Último check-in:</b> ${lc ? `${fdate(lc.date)} · adherencia ${lc.adherence}/5 · energía ${lc.energy}/5` : '—'}</p>
       <h3 style="margin-top:12px">Próximas citas</h3>${ap.map((a) => `<div class="li"><b>${fdate(a.date)} ${a.time}</b><span class="tag">${a.type}</span></div>`).join('') || '<span class="mute">Ninguna</span>'}</section></div>
-      <div class="bar">${c.phone ? `<a class="btn" target="_blank" href="https://wa.me/${c.phone.replace(/\D/g, '')}">${ic('chat', 16)}WhatsApp</a>` : ''}<a class="btn" href="#/hoja/${c.id}">${ic('print', 16)}Plan PDF</a><span class="grow"></span>${btn('Eliminar cliente', 'client-del', `data-id="${c.id}"`, 'trash', 'del')}</div>`;
+      <div class="bar">${c.phone ? `<a class="btn" target="_blank" href="https://wa.me/${c.phone.replace(/\D/g, '')}">${ic('chat', 16)}WhatsApp</a>` : ''}<a class="btn" href="#/hoja/${c.id}">${ic('print', 16)}Plan PDF</a>${btn('Portal del cliente', 'tab', 'data-k="cliente" data-v="actividad"', 'zap')}<span class="grow"></span>${btn('Eliminar cliente', 'client-del', `data-id="${c.id}"`, 'trash', 'del')}</div>`;
+  } else if (t === 'actividad') {
+    body = mods.activity.activityTab(c);
   } else if (t === 'programa') {
     body = programTab(c, r);
   } else if (t === 'nutricion') {
@@ -238,7 +247,7 @@ V.cliente = (id) => {
       <div class="cols"><section class="card"><h3>Peso</h3>${w.length > 1 ? spark(w.map((x) => x.weight)) + `<p class="mute">${w[0].weight} → ${w.at(-1).weight} kg (${(w.at(-1).weight - w[0].weight).toFixed(1)} kg)</p>` : '<p class="mute">Registra al menos 2 pesos para ver la gráfica.</p>'}</section>
       <section class="card"><h3>Check-ins</h3>${ck.length ? `<div class="chips">${['adherence:Adherencia', 'energy:Energía'].map((kv) => { const [k, l] = kv.split(':'); const avg = ck.slice(0, 4).reduce((a, x) => a + (x[k] || 0), 0) / Math.min(4, ck.length); return `<span class="chip">${l} <b>${avg.toFixed(1)}/5</b></span>`; }).join('')}</div>` : ''}
       ${ck.slice(0, 6).map((x) => `<div class="li"><b>${fdate(x.date)}</b><span>Adh ${x.adherence}/5 · Energía ${x.energy}/5 · Sueño ${x.sleep || '—'} h${x.pain ? ` · ⚠ ${esc(x.pain)}` : ''}${x.note ? `<br><span class="mute">${esc(x.note)}</span>` : ''}</span><button class="sm del" data-act="checkin-del" data-id="${c.id}" data-i="${c.checkins.indexOf(x)}">${ic('trash', 14)}</button></div>`).join('') || '<p class="mute">Aún sin check-ins. Pídele cada semana cómo va y regístralo aquí.</p>'}</section></div>
-      <section class="card"><h3>Medidas</h3><div class="tw"><table><tr><th>Fecha</th><th>Peso kg</th><th>% grasa</th><th>Cintura cm</th><th>Nota</th><th></th></tr>${m.map((x) => `<tr><td>${fdate(x.date)}</td><td>${x.weight ?? ''}</td><td>${x.fat ?? ''}</td><td>${x.waist ?? ''}</td><td>${esc(x.note)}</td><td><button class="sm del" data-act="measure-del" data-id="${c.id}" data-i="${c.measures.indexOf(x)}">${ic('trash', 14)}</button></td></tr>`).join('') || '<tr><td colspan=6 class="mute">Aún sin registros.</td></tr>'}</table></div></section>`;
+      <section class="card"><h3>Medidas</h3>${deltas(m)}<div class="tw"><table><tr><th>Fecha</th><th>Peso kg</th><th>% grasa</th><th>Cintura</th><th>Pecho</th><th>Cadera</th><th>Brazo</th><th>Muslo</th><th>Nota</th><th></th></tr>${m.map((x) => `<tr><td>${fdate(x.date)}</td><td>${x.weight ?? ''}</td><td>${x.fat ?? ''}</td><td>${x.waist ?? ''}</td><td>${x.chest ?? ''}</td><td>${x.hip ?? ''}</td><td>${x.arm ?? ''}</td><td>${x.thigh ?? ''}</td><td>${esc(x.note)}</td><td><button class="sm del" data-act="measure-del" data-id="${c.id}" data-i="${c.measures.indexOf(x)}">${ic('trash', 14)}</button></td></tr>`).join('') || '<tr><td colspan=10 class="mute">Aún sin registros.</td></tr>'}</table></div></section>${mods.activity.photosSection(c)}`;
   } else if (t === 'carpeta') {
     body = `<section class="card"><h3>Carpeta de ${esc(c.name)}</h3><p class="mute">Fotos de progreso, análisis, PDFs de laboratorio, consentimientos, etc. (hasta 25 MB cada uno)</p>
       <label class="drop">${ic('plus', 18)} Agregar archivos<input type="file" id="up" multiple data-client="${c.id}" hidden></label>
@@ -260,6 +269,15 @@ V.cliente = (id) => {
   <nav class="tabs">${tabs.map(([k, l]) => `<button class="${t === k ? 'on' : ''}" data-act="tab" data-k="cliente" data-v="${k}">${l}</button>`).join('')}</nav>${body}`;
 };
 
+function deltas(m) {
+  const defs = [['weight', 'Peso', 'kg', -1], ['fat', '% grasa', '%', -1], ['waist', 'Cintura', 'cm', -1], ['chest', 'Pecho', 'cm', 1], ['hip', 'Cadera', 'cm', 0], ['arm', 'Brazo', 'cm', 1], ['thigh', 'Muslo', 'cm', 1]];
+  const chips = defs.map(([k, l, u, good]) => {
+    const v = m.filter((x) => x[k] !== '' && x[k] != null).map((x) => +x[k]); if (v.length < 2) return '';
+    const d = Math.round((v.at(-1) - v[0]) * 10) / 10; const cls = d === 0 || good === 0 ? '' : (d < 0) === (good < 0) ? 'ok' : 'bad';
+    return `<span class="chip ${cls}">${l} <b>${v.at(-1)} ${u}</b> (${d > 0 ? '+' : ''}${d})</span>`;
+  }).join('');
+  return chips ? `<div class="chips">${chips}</div>` : '';
+}
 function spark(vals) {
   const W = 500, H = 100, mn = Math.min(...vals), mx = Math.max(...vals), r = mx - mn || 1;
   const pts = vals.map((v, i) => [(i / (vals.length - 1)) * (W - 24) + 12, H - 14 - ((v - mn) / r) * (H - 28)]);
@@ -285,7 +303,7 @@ function programTab(c, r) {
     <div><label class="fl">Cardio final</label><select id="g-fin">${opts([['0', 'No'], ['1', 'Sí, al terminar']], dr?.finisher ? '1' : '0')}</select></div></div>
     <label class="fl">Equipo disponible</label><div class="checks" id="g-equip">${EQUIP.map((e) => `<label><input type="checkbox" value="${e}" ${(dr?.equipment || c.equipment || []).includes(e) ? 'checked' : ''}>${e}</label>`).join('')}</div>
     <div class="bar">${btn('Generar programa', 'prog-gen', `data-id="${c.id}"`, 'zap', 'pri')}</div></section>
-    <section class="card"><div class="row sp"><div><h3>Armar la rutina a mano</h3><p class="mute" style="margin:0">Elige los ejercicios directamente de la biblioteca, con imágenes y compatibilidad con las lesiones del cliente.</p></div>${btn('Nueva rutina', 'routine-new', `data-c="${c.id}"`, 'plus')}</div></section>
+    <section class="card"><div class="row sp"><div><h3>Armar la rutina a mano</h3><p class="mute" style="margin:0">Elige los ejercicios directamente de la biblioteca, con imágenes y compatibilidad con las lesiones del cliente.</p></div>${btn('Nueva rutina', 'routine-new', `data-c="${c.id}"`, 'plus')}</div>${S.routines.length ? `<div class="row" style="margin-top:12px"><select id="tpl-sel" style="max-width:340px"><option value="">Usar una rutina existente como plantilla…</option>${S.routines.map((q) => `<option value="${q.id}">${esc(q.name)}</option>`).join('')}</select>${btn('Copiar al cliente', 'prog-tpl', `data-id="${c.id}"`, 'copy', 'sm')}</div>` : ''}</section>
     ${dr ? `<section class="card draft"><div class="row sp"><h3>Vista previa · ${esc(dr.routine.name)}</h3><div class="bar" style="margin:0">${btn('Guardar y asignar', 'prog-save', `data-id="${c.id}"`, 'check', 'pri')}${btn('Descartar', 'prog-drop')}</div></div></section>${routineBlock(dr.routine)}`
     : r ? `<div class="row sp"><h2>Programa actual: ${esc(r.name)}</h2><div class="bar" style="margin:0"><a class="btn sm" href="#/rutina/${r.id}">${ic('edit', 14)}Editar</a><a class="btn sm" href="#/hojar/${r.id}">${ic('print', 14)}PDF</a>${btn('Copiar', 'copy-routine', `data-id="${r.id}"`, 'copy', 'sm')}</div></div>${routineBlock(r)}` : '<p class="mute">Este cliente aún no tiene programa. Genera uno arriba.</p>'}`;
 }
@@ -301,6 +319,7 @@ const apptFields = () => [
   { k: 'groupId', l: 'Grupo (solo si es grupal)', t: 'select', o: [['', '— ninguno —'], ...S.groups.map((g) => [g.id, g.name])] },
   { k: 'clientIds', l: 'Clientes (si no usas grupo)', t: 'checks', o: S.clients.map((c) => [c.id, c.name]) },
   { k: 'status', l: 'Estado', t: 'select', o: [['programada', 'Programada'], ['realizada', 'Realizada'], ['cancelada', 'Cancelada'], ['no vino', 'No asistió']] },
+  { k: 'repeat', l: 'Repetir (solo al crear)', t: 'select', o: [['', 'No se repite'], ['7', 'Cada semana'], ['14', 'Cada 2 semanas']] }, { k: 'repeatCount', l: 'Cuántas citas en total (si se repite)', t: 'number' },
   { k: 'notes', l: 'Notas', t: 'textarea' },
 ];
 // ---------- Entrenamientos (rutinas) ----------
@@ -309,7 +328,7 @@ V.entrenamientos = () => page('Entrenamientos', 'Plantillas y programas para tus
   <div class="grid">${S.routines.map((r) => `<div class="card"><div class="row sp"><h3>${esc(r.name)}</h3>${r.program ? trackTag(r.program.track) : ''}</div><p class="mute">${esc(r.goal)} · ${r.days.length} días · ${r.days.reduce((a, d) => a + d.items.length, 0)} ejercicios</p>
     <div class="thumbs">${r.days.flatMap((d) => d.items).slice(0, 5).map((i) => thumb(ex(i.exId))).join('')}</div>
     <p class="mini">Asignada a: ${S.clients.filter((c) => c.routineId === r.id).map((c) => esc(c.name)).join(', ') || 'nadie'}</p>
-    <div class="bar"><a class="btn sm pri" href="#/rutina/${r.id}">Abrir / editar</a><a class="btn sm" href="#/hojar/${r.id}">${ic('print', 14)}PDF</a>${btn('Copiar', 'copy-routine', `data-id="${r.id}"`, 'copy', 'sm')}${btn('', 'routine-del', `data-id="${r.id}"`, 'trash', 'sm del')}</div></div>`).join('') || '<p class="mute">Aún no hay rutinas.</p>'}</div>`);
+    <div class="bar"><a class="btn sm pri" href="#/rutina/${r.id}">Abrir / editar</a><a class="btn sm" href="#/hojar/${r.id}">${ic('print', 14)}PDF</a>${btn('Duplicar', 'routine-dup', `data-id="${r.id}"`, 'copy', 'sm')}${btn('Copiar', 'copy-routine', `data-id="${r.id}"`, 'copy', 'sm')}${btn('', 'routine-del', `data-id="${r.id}"`, 'trash', 'sm del')}</div></div>`).join('') || '<p class="mute">Aún no hay rutinas.</p>'}</div>`);
 
 // ---------- Biblioteca ----------
 V.biblioteca = () => {
@@ -332,11 +351,11 @@ V.pagos = () => {
   const paid = S.payments.filter((p) => p.status === 'pagado' && (p.paidOn || '').startsWith(month)).reduce((a, p) => a + p.amount, 0);
   const pend = S.payments.filter((p) => p.status !== 'pagado');
   const ps = [...S.payments].sort((a, b) => (a.status === b.status ? b.due.localeCompare(a.due) : a.status === 'pagado' ? 1 : -1));
-  return page('Pagos', 'Cobros, vencimientos y recordatorios', `${btn('Generar cobros del mes', 'pay-month')}${btn('Planes y precios', 'plan-edit')}${btn('Registrar cobro', 'pay-new', '', 'plus', 'pri')}`,
-    `<div class="kpis three"><div class="kpi"><span class="k-ic g">${ic('dollar')}</span><b>${money(paid)}</b><small>Cobrado este mes</small></div><div class="kpi"><span class="k-ic w">${ic('clip')}</span><b>${money(pend.reduce((a, p) => a + p.amount, 0))}</b><small>Por cobrar</small></div><div class="kpi"><span class="k-ic r">${ic('alert')}</span><b>${money(pend.filter((p) => p.due < t).reduce((a, p) => a + p.amount, 0))}</b><small>Vencido</small></div></div>
+  return page('Pagos', 'Cobros, vencimientos y recordatorios', `${btn('Exportar CSV', 'csv-payments', '', 'copy')}${btn('Generar cobros del mes', 'pay-month')}${btn('Planes y precios', 'plan-edit')}${btn('Registrar cobro', 'pay-new', '', 'plus', 'pri')}`,
+    `<div class="kpis"><div class="kpi"><span class="k-ic g">${ic('dollar')}</span><b>${money(paid)}</b><small>Cobrado este mes</small></div><div class="kpi"><span class="k-ic w">${ic('clip')}</span><b>${money(pend.reduce((a, p) => a + p.amount, 0))}</b><small>Por cobrar</small></div><div class="kpi"><span class="k-ic r">${ic('alert')}</span><b>${money(pend.filter((p) => p.due < t).reduce((a, p) => a + p.amount, 0))}</b><small>Vencido</small></div><div class="kpi"><span class="k-ic">${ic('users')}</span><b>${money(S.clients.filter((c) => c.active).reduce((a, c) => a + planPrice(c), 0))}</b><small>Ingreso mensual recurrente</small></div></div>
     <section class="card"><div class="tw"><table><tr><th>Cliente</th><th>Concepto</th><th>Monto</th><th>Vence</th><th>Estado</th><th></th></tr>${ps.map((p) => {
       const c = cl(p.clientId);
-      return `<tr><td>${esc(c?.name || '?')}</td><td>${esc(p.concept)}</td><td>${money(p.amount)}</td><td>${fdate(p.due)}</td><td>${payTag(p)}</td><td class="nw">${p.status !== 'pagado' ? `${btn('Pagado', 'pay-done', `data-id="${p.id}"`, 'check', 'sm pri')}${c?.phone ? btn('', 'pay-remind', `data-id="${p.id}"`, 'chat', 'sm') : ''}` : ''}${btn('', 'pay-del', `data-id="${p.id}"`, 'trash', 'sm del')}</td></tr>`;
+      return `<tr><td>${esc(c?.name || '?')}</td><td>${esc(p.concept)}</td><td>${money(p.amount)}</td><td>${fdate(p.due)}</td><td>${payTag(p)}</td><td class="nw">${p.status !== 'pagado' ? `${btn('Pagado', 'pay-done', `data-id="${p.id}"`, 'check', 'sm pri')}${c?.phone ? btn('', 'pay-remind', `data-id="${p.id}"`, 'chat', 'sm') : ''}` : ''}${p.status === 'pagado' ? `<a class="btn sm" href="#/recibo/${p.id}">Recibo</a>` : ''}${btn('', 'pay-del', `data-id="${p.id}"`, 'trash', 'sm del')}</td></tr>`;
     }).join('') || '<tr><td colspan=6 class="mute">Sin pagos registrados.</td></tr>'}</table></div></section>`);
 };
 
@@ -372,11 +391,11 @@ function renderPlan(r) {
 }
 
 V.ajustes = () => page('Ajustes', 'Tu marca, IA, cuenta y respaldos', '',
-  `<div class="cols"><section class="card"><h3>Tu marca</h3><label class="fl">Tu nombre o el de tu negocio (aparece en los PDF y en el saludo)</label><input id="brand" value="${esc(S.settings?.brand || '')}" placeholder="Ej. CR Athletic Lab"><div class="bar">${btn('Guardar', 'brand-save', '', 'check', 'pri')}</div></section>
+  `<div class="cols"><section class="card"><h3>Tu marca</h3><label class="fl">Tu nombre o el de tu negocio (aparece en los PDF y en el saludo)</label><input id="brand" value="${esc(S.settings?.brand || '')}" placeholder="Ej. CR Athletic Lab"><label class="fl">Moneda</label><div class="seg">${[['MXN', 'Pesos (MXN)'], ['USD', 'Dólares (USD)']].map(([k, l]) => `<button class="${(S.settings?.currency || 'MXN') === k ? 'on' : ''}" data-act="currency-set" data-v="${k}">${l}</button>`).join('')}</div><div class="bar">${btn('Guardar', 'brand-save', '', 'check', 'pri')}</div></section>
   <section class="card"><h3>Cuenta</h3><p>${esc(USER.email)}</p><div class="bar">${btn('Cerrar sesión', 'logout', '', 'out')}</div></section></div>
   <section class="card"><h3>IA (Claude)</h3><p class="mute">Con tu API key de Anthropic, "Entrenar en grupo" usa IA para razonar sobre cada cliente. Sin key funciona igual con el sistema de reglas. La key se guarda solo en tu cuenta.</p>
   <p>Estado: ${S.settings?.apiKey ? '<span class="tag ok">API key configurada</span>' : '<span class="tag warn">Sin API key (usa reglas)</span>'}</p><div class="row"><input id="key" type="password" placeholder="sk-ant-…" autocomplete="off"><button class="pri" data-act="key-save">Guardar</button></div></section>
-  <section class="card"><h3>Datos</h3><div class="bar">${btn('Descargar respaldo (.json)', 'export')}<label class="btn">Restaurar respaldo<input type="file" id="imp" accept=".json" hidden></label>${btn('Agregar datos de ejemplo', 'demo')}${btn('Vaciar mi cuenta', 'reset', '', 'trash', 'del')}</div></section>
+  <section class="card"><h3>Datos</h3><div class="bar">${btn('Clientes (CSV)', 'csv-clients', '', 'copy')}${btn('Pagos (CSV)', 'csv-payments', '', 'copy')}${btn('Descargar respaldo (.json)', 'export')}<label class="btn">Restaurar respaldo<input type="file" id="imp" accept=".json" hidden></label>${btn('Agregar datos de ejemplo', 'demo')}${btn('Vaciar mi cuenta', 'reset', '', 'trash', 'del')}</div></section>
   <p class="mini">Imágenes de ejercicios: <a href="https://github.com/yuhonas/free-exercise-db" target="_blank">free-exercise-db</a> (dominio público).</p>`);
 
 // ---------- Texto para compartir ----------
@@ -387,11 +406,19 @@ const dietText = (d) => `*${d.name}*\n${d.kcal} kcal · P ${d.protein}g · C ${d
 const groupForm = (g) => form(g.id ? 'Editar grupo' : 'Nuevo grupo', [{ k: 'name', l: 'Nombre', req: 1 }, { k: 'notes', l: 'Horario / notas' }, { k: 'clientIds', l: 'Integrantes', t: 'checks', o: S.clients.map((c) => [c.id, c.name]) }], g);
 const exFields = () => [{ k: 'name', l: 'Nombre', req: 1 }, { k: 'pattern', l: 'Patrón', t: 'select', o: plain(PATTERNS) }, { k: 'muscle', l: 'Músculo principal', t: 'select', o: plain(GROUPS) }, { k: 'level', l: 'Nivel', t: 'select', o: LEVELS }, { k: 'type', l: 'Tipo', t: 'select', o: plain(TYPES) }, { k: 'equip', l: 'Equipo', t: 'checks', o: [['peso corporal', 'peso corporal'], ...plain(EQUIP)] }, { k: 'avoid', l: 'Precaución con (lesiones)', t: 'tags', ph: 'rodilla, hombro…' }, { k: 'tags', l: 'Perfiles', t: 'checks', o: [['general', 'General'], ['beisbol', 'Béisbol'], ['hipertrofia', 'Hipertrofia']] }, { k: 'desc', l: 'Cómo se hace', t: 'textarea' }, { k: 'cues', l: 'Puntos clave (separa con " · ")' }, { k: 'regress', l: 'Versión más fácil' }, { k: 'progress', l: 'Versión más difícil' }, { k: 'video', l: 'Link de video (opcional)' }];
 const planPrice = (c) => S.plans.find((p) => p.id === c?.planId)?.price || 0;
-const payFields = () => [{ k: 'clientId', l: 'Cliente', t: 'select', o: S.clients.map((c) => [c.id, c.name]) }, { k: 'concept', l: 'Concepto' }, { k: 'amount', l: 'Monto (MXN)', t: 'number' }, { k: 'due', l: 'Fecha de vencimiento', t: 'date' }, { k: 'status', l: 'Estado', t: 'select', o: [['pendiente', 'Pendiente'], ['pagado', 'Ya pagado']] }, { k: 'method', l: 'Método (si ya pagó)' }];
+const payFields = () => [{ k: 'clientId', l: 'Cliente', t: 'select', o: S.clients.map((c) => [c.id, c.name]) }, { k: 'concept', l: 'Concepto' }, { k: 'amount', l: 'Monto', t: 'number' }, { k: 'due', l: 'Fecha de vencimiento', t: 'date' }, { k: 'status', l: 'Estado', t: 'select', o: [['pendiente', 'Pendiente'], ['pagado', 'Ya pagado']] }, { k: 'method', l: 'Método (si ya pagó)' }];
 function addAppt(v) {
-  const clash = S.appointments.find((a) => a.date === v.date && a.time === v.time && a.status === 'programada');
-  if (clash && !confirm(`Ya hay una cita a las ${v.time} (${apptWho(clash)}). ¿Agendar de todos modos?`)) return;
-  S.appointments.push({ id: uid('a'), ...v }); save(); toast('Cita agendada'); if (location.hash !== '#/agenda') location.hash = '#/agenda'; else render();
+  const { repeat, repeatCount, ...base } = v;
+  const clash = S.appointments.find((a) => a.date === base.date && a.time === base.time && a.status === 'programada');
+  if (clash && !confirm(`Ya hay una cita a las ${base.time} (${apptWho(clash)}). ¿Agendar de todos modos?`)) return;
+  const n = repeat ? Math.min(52, Math.max(2, +repeatCount || 8)) : 1, sid = n > 1 ? uid('s') : '';
+  for (let i = 0; i < n; i++) { const d = new Date(base.date + 'T12:00'); d.setDate(d.getDate() + i * (+repeat || 0)); S.appointments.push({ id: uid('a'), ...base, date: d.toISOString().slice(0, 10), seriesId: sid }); }
+  save(); toast(n > 1 ? `${n} citas agendadas` : 'Cita agendada'); if (location.hash !== '#/agenda') location.hash = '#/agenda'; else render();
+}
+function onDone(a) {
+  if (a.status !== 'realizada' || a.counted) return;
+  a.counted = true;
+  apptIds(a).forEach((id) => { const c = cl(id); if (c && typeof c.credits === 'number' && c.credits > 0) c.credits -= 1; });
 }
 function readPlanForm() {
   const p = ui.plan;
@@ -406,6 +433,7 @@ const ACT = {
   go: (el) => { location.hash = el.dataset.to; },
   tab: (el) => { tab[el.dataset.k] = el.dataset.v; render(); },
   tf: (el) => { ui.tf = el.dataset.v; render(); },
+  async 'credits-add'(el) { const c = cl(el.dataset.id); const v = await form('Paquete de sesiones', [{ k: 'n', l: 'Sesiones a agregar (cada sesión realizada descuenta 1)', t: 'number' }], { n: 10 }); if (!v || !v.n) return; c.credits = (c.credits || 0) + Number(v.n); save(); render(); toast(`${c.name.split(' ')[0]} tiene ${c.credits} sesiones`); },
   async 'client-new'() {
     const v = await form('Nuevo cliente', clientFields(), newClientDefaults()); if (!v) return;
     const c = { id: uid('c'), ...normalizeClient(v), measures: [], files: [], checkins: [] }; S.clients.push(c); save(); location.hash = '#/cliente/' + c.id; render();
@@ -416,7 +444,7 @@ const ACT = {
   },
   'client-del'(el) { if (!confirm('¿Eliminar cliente y todo su historial?')) return; const id = el.dataset.id; del('clients', id); S.groups.forEach((g) => (g.clientIds = g.clientIds.filter((i) => i !== id))); S.payments = S.payments.filter((p) => p.clientId !== id); save(); location.hash = '#/clientes'; },
   async 'measure-add'(el) {
-    const v = await form('Registrar medidas', [{ k: 'date', l: 'Fecha', t: 'date', req: 1 }, { k: 'weight', l: 'Peso (kg)', t: 'number', step: '0.1' }, { k: 'fat', l: '% grasa', t: 'number', step: '0.1' }, { k: 'waist', l: 'Cintura (cm)', t: 'number', step: '0.1' }, { k: 'note', l: 'Nota' }], { date: today() }); if (!v) return;
+    const v = await form('Registrar medidas', [{ k: 'date', l: 'Fecha', t: 'date', req: 1 }, { k: 'weight', l: 'Peso (kg)', t: 'number', step: '0.1' }, { k: 'fat', l: '% grasa', t: 'number', step: '0.1' }, { k: 'waist', l: 'Cintura (cm)', t: 'number', step: '0.1' }, { k: 'chest', l: 'Pecho (cm)', t: 'number', step: '0.1' }, { k: 'hip', l: 'Cadera (cm)', t: 'number', step: '0.1' }, { k: 'arm', l: 'Brazo (cm)', t: 'number', step: '0.1' }, { k: 'thigh', l: 'Muslo (cm)', t: 'number', step: '0.1' }, { k: 'note', l: 'Nota' }], { date: today() }); if (!v) return;
     cl(el.dataset.id).measures.push(v); save(); render();
   },
   'measure-del'(el) { cl(el.dataset.id).measures.splice(+el.dataset.i, 1); save(); render(); },
@@ -454,9 +482,20 @@ const ACT = {
 
   async 'appt-new'() { const v = await form('Nueva cita', apptFields(), { date: today(), time: '07:00', duration: 60, type: 'individual', status: 'programada', clientIds: [], groupId: '' }); if (v) addAppt(v); },
   'cal-goto'(el) { ui.cal = ui.cal || {}; ui.cal.sel = el.dataset.d; ui.cal.date = el.dataset.d; ui.cal.mode = 'week'; location.hash = '#/agenda'; },
-  async 'appt-edit'(el) { const a = find('appointments', el.dataset.id); const v = await form('Editar cita', apptFields(), a); if (v) { Object.assign(a, v); save(); render(); } },
-  'appt-del'(el) { if (confirm('¿Eliminar cita?')) { del('appointments', el.dataset.id); save(); render(); } },
+  async 'appt-edit'(el) { const a = find('appointments', el.dataset.id); const v = await form('Editar cita', apptFields(), a); if (v) { const { repeat, repeatCount, ...rest } = v; Object.assign(a, rest); onDone(a); save(); render(); } },
+  'appt-del'(el) {
+    const a = find('appointments', el.dataset.id); if (!confirm('¿Eliminar cita?')) return;
+    del('appointments', el.dataset.id);
+    if (a.seriesId && S.appointments.some((q) => q.seriesId === a.seriesId && q.date > a.date) && confirm('Esta cita es parte de una serie. ¿Eliminar también las siguientes?')) S.appointments = S.appointments.filter((q) => !(q.seriesId === a.seriesId && q.date > a.date));
+    save(); render();
+  },
 
+  'routine-dup'(el) { const r = find('routines', el.dataset.id); S.routines.push({ ...JSON.parse(JSON.stringify(r)), id: uid('r'), name: r.name + ' (copia)' }); save(); render(); toast('Rutina duplicada'); },
+  'prog-tpl'(el) {
+    const id = $('#tpl-sel').value; if (!id) return toast('Elige una rutina');
+    const r = find('routines', id), c = cl(el.dataset.id), n = { ...JSON.parse(JSON.stringify(r)), id: uid('r'), name: `${c.name.split(' ')[0]} · ${r.name}` };
+    S.routines.push(n); c.routineId = n.id; save(); render(); toast('Rutina copiada y asignada');
+  },
   'routine-del'(el) { if (confirm('¿Eliminar rutina?')) { del('routines', el.dataset.id); S.clients.forEach((c) => c.routineId === el.dataset.id && (c.routineId = '')); save(); render(); } },
   'rday-add'(el) { const r = find('routines', el.dataset.id); r.days.push({ name: 'Día ' + (r.days.length + 1), items: [] }); save(); render(); },
   'rday-del'(el) { find('routines', el.dataset.id).days.splice(+el.dataset.d, 1); save(); render(); },
@@ -527,6 +566,12 @@ const ACT = {
     const v = await form('Agendar sesión grupal', [{ k: 'date', l: 'Fecha', t: 'date', req: 1 }, { k: 'time', l: 'Hora', t: 'time', req: 1 }], { date: today(), time: '07:00' }); if (!v) return;
     addAppt({ ...v, duration: ui.result.totalMinutes, type: 'grupal', groupId: '', clientIds: ui.plan.clientIds, status: 'programada', notes: ui.result.title });
   },
+  'currency-set'(el) { (S.settings ||= {}).currency = el.dataset.v; save(); render(); },
+  'csv-payments'() { download(`pagos-${today()}.csv`, csv([['Cliente', 'Concepto', 'Monto', 'Vence', 'Estado', 'Fecha de pago', 'Método'], ...S.payments.map((p) => [cl(p.clientId)?.name || '', p.concept, p.amount, p.due, p.status, p.paidOn || '', p.method || ''])])); },
+  'csv-clients'() { download(`clientes-${today()}.csv`, csv([['Nombre', 'Teléfono', 'Correo', 'Objetivo', 'Tipo', 'Nivel', 'Plan', 'Activo', 'Sesiones restantes'], ...S.clients.map((c) => [c.name, c.phone, c.email, c.goal, TRACK_NAME[c.track || 'general'], c.level, S.plans.find((p) => p.id === c.planId)?.name || '', c.active ? 'Sí' : 'No', c.credits ?? ''])])); },
+  'onb-hide'() { (S.settings ||= {}).hideOnboarding = true; save(); render(); },
+  search() { openSearch(); },
+  's-go'(el) { closeModal(); if (el.dataset.ex) ACT['ex-view']({ dataset: { id: el.dataset.ex } }); else location.hash = el.dataset.go; },
   'brand-save'() { (S.settings ||= {}).brand = $('#brand').value.trim(); save(); toast('Guardado'); },
   'key-save'() { (S.settings ||= {}).apiKey = $('#key').value.trim(); save(); toast(S.settings.apiKey ? 'API key guardada' : 'API key eliminada'); render(); },
   async logout() { await flush(); await sb.auth.signOut(); location.reload(); },
@@ -574,10 +619,66 @@ document.addEventListener('input', (e) => {
   }
 });
 
+// ---------- Onboarding, actividad, búsqueda, recibos ----------
+function onboarding() {
+  if (S.settings?.hideOnboarding) return '';
+  const c0 = S.clients[0] ? '#/cliente/' + S.clients[0].id : '#/clientes';
+  const steps = [['Pon el nombre de tu negocio', !!S.settings?.brand, '#/ajustes'], ['Agrega tu primer cliente', S.clients.length > 0, '#/clientes'], ['Asígnale un programa de entrenamiento', S.clients.some((c) => c.routineId), c0], ['Crea su plan de nutrición', S.clients.some((c) => c.dietId), c0], ['Agenda una cita', S.appointments.length > 0, '#/agenda'], ['Activa el portal y mándaselo por WhatsApp', Object.keys(mods.activity.links).length > 0, c0]];
+  const done = steps.filter((q) => q[1]).length; if (done === steps.length) return '';
+  return `<section class="card onb"><div class="row sp"><div class="grow"><h3>Primeros pasos · ${done}/${steps.length}</h3><div class="meter"><i style="width:${done / steps.length * 100}%"></i></div></div>${btn('Ocultar', 'onb-hide', '', '', 'sm')}</div><div class="onbg">${steps.map(([l, ok, h]) => `<a class="onbs ${ok ? 'ok' : ''}" href="${h}"><span>${ok ? '✓' : ''}</span>${l}</a>`).join('')}</div></section>`;
+}
+function activityCard() {
+  const L = mods.activity.logs.filter((l) => l.kind !== 'message').slice(0, 6), nu = mods.activity.logs.filter((l) => !l.handled && l.kind !== 'message').length;
+  const txt = (l) => ({ workout: `completó ${esc(l.data.dayName || 'un entrenamiento')}`, checkin: `envió su check-in (adh ${l.data.adherence}/5)`, intake: 'llenó su ficha inicial' }[l.kind]);
+  return `<section class="card"><div class="row sp"><h3>Actividad de tus clientes ${nu ? `<span class="badge">${nu}</span>` : ''}</h3><span class="mute small">Desde el portal</span></div>${L.length ? L.map((l) => `<a class="li act" href="#/cliente/${l.client_id}" data-act="open-act" data-id="${l.client_id}"><b>${fdate(l.created_at.slice(0, 10))}</b><span><b style="min-width:0">${esc(cl(l.client_id)?.name || 'Cliente')}</b> ${txt(l)}</span>${l.handled ? '' : '<span class="tag warn">nuevo</span>'}</a>`).join('') : '<p class="mute empty">Cuando tus clientes usen el portal verás aquí sus entrenamientos y check-ins. Activa el portal desde la pestaña Actividad de cada cliente.</p>'}</section>`;
+}
+const csv = (rows) => rows.map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+const download = (name, text) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8' })); a.download = name; a.click(); };
+V.recibo = (id) => {
+  const p = find('payments', id); if (!p) return '<p>No encontrado</p>'; const c = cl(p.clientId);
+  const folio = 'R-' + p.id.slice(-6).toUpperCase();
+  return `<div class="bar noprint"><a href="#/pagos">${ic('back', 16)} Volver</a><span class="grow"></span><button class="pri" onclick="print()">${ic('print', 16)}Imprimir / Guardar PDF</button></div>
+  <article class="sheet receipt"><header class="sh-h"><div class="sh-b">${logoMark(46)}<div><b>${esc(S.settings?.brand || 'C-Lab')}</b><small>Coaching Lab</small></div></div><div class="sh-t"><h1>Recibo de pago</h1><p>Folio ${folio}</p></div></header>
+  <div class="rc-body"><div class="rc-amount"><small>Monto recibido</small><b>${money(p.amount)}</b></div>
+  <table class="sh-t1"><tbody><tr><th>Cliente</th><td>${esc(c?.name || '—')}</td></tr><tr><th>Concepto</th><td>${esc(p.concept)}</td></tr><tr><th>Vencimiento</th><td>${fdate(p.due)}</td></tr><tr><th>Fecha de pago</th><td>${p.paidOn ? fdate(p.paidOn) : '—'}</td></tr><tr><th>Método</th><td>${esc(p.method || '—')}</td></tr><tr><th>Estado</th><td><b>${p.status === 'pagado' ? 'PAGADO' : 'PENDIENTE'}</b></td></tr></tbody></table>
+  <p class="mute small" style="margin-top:24px">Comprobante de pago por servicios de entrenamiento. Este recibo no es una factura fiscal.</p></div>
+  <footer class="sh-f"><span>${esc(S.settings?.brand || 'C-Lab')} · generado con C-Lab</span><span>${folio}</span></footer></article>`;
+};
+function openSearch() {
+  const m = $('#modal'); m.hidden = false; ui.sIdx = 0;
+  m.innerHTML = `<div class="dlg srch"><div class="search" style="max-width:none">${ic('search', 16)}<input id="sq" placeholder="Buscar cliente, ejercicio, rutina, dieta o página…" autocomplete="off"></div><div id="sres"></div><div class="mini">↑↓ para moverte · Enter para abrir · Esc para cerrar</div></div>`;
+  $('#sq').focus(); drawSearch('');
+}
+function searchItems(q) {
+  q = q.toLowerCase().trim(); const out = [];
+  const add = (t, l, sub, go, ex) => { if (!q || l.toLowerCase().includes(q) || (sub || '').toLowerCase().includes(q)) out.push({ t, l, sub, go, ex }); };
+  NAV.forEach(([, items]) => items.forEach(([h, l]) => add('Página', l, '', h)));
+  S.clients.forEach((c) => add('Cliente', c.name, c.goal, '#/cliente/' + c.id));
+  S.routines.forEach((r) => add('Rutina', r.name, r.goal, '#/rutina/' + r.id));
+  S.diets.forEach((d) => add('Dieta', d.name, `${d.kcal} kcal`, '#/dieta/' + d.id));
+  if (q) S.exercises.forEach((e) => add('Ejercicio', e.name, e.muscle, '', e.id));
+  return out.slice(0, 12);
+}
+function drawSearch(q) {
+  const items = searchItems(q); ui.sItems = items; ui.sIdx = Math.min(ui.sIdx || 0, Math.max(0, items.length - 1));
+  $('#sres').innerHTML = items.map((it, i) => `<button class="sr ${i === ui.sIdx ? 'on' : ''}" data-act="s-go" ${it.ex ? `data-ex="${it.ex}"` : `data-go="${it.go}"`}><span class="tag">${it.t}</span><b>${esc(it.l)}</b><small>${esc(it.sub || '')}</small></button>`).join('') || '<p class="mute">Sin resultados.</p>';
+}
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (S) openSearch(); return; }
+  if (e.key === 'Escape' && !$('#modal').hidden) { closeModal(); return; }
+  if (e.target.id === 'sq') {
+    const n = (ui.sItems || []).length;
+    if (e.key === 'ArrowDown') { e.preventDefault(); ui.sIdx = (ui.sIdx + 1) % Math.max(1, n); drawSearch($('#sq').value); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); ui.sIdx = (ui.sIdx - 1 + n) % Math.max(1, n); drawSearch($('#sq').value); }
+    else if (e.key === 'Enter') { e.preventDefault(); document.querySelector('#sres .sr.on')?.click(); }
+  }
+});
+document.addEventListener('input', (e) => { if (e.target.id === 'sq') { ui.sIdx = 0; drawSearch(e.target.value); } });
+
 // ---------- Módulos ----------
-const ctx = { ui, esc, ic, btn, page, thumb, avatar, form, dialog, closeModal, save, render, renderMain, toast, today, fdate, money, uid, cl, ex, find, del, plain, opts, copy, $, PATTERNS, GROUPS, TYPES, LEVELS, EQUIP, TRACK_NAME, apptFields, addAppt, apptWho, apptIds, apptSort };
+const ctx = { sb, user: () => USER, onDone, ui, esc, ic, btn, page, thumb, avatar, form, dialog, closeModal, save, render, renderMain, toast, today, fdate, money, uid, cl, ex, find, del, plain, opts, copy, $, PATTERNS, GROUPS, TYPES, LEVELS, EQUIP, TRACK_NAME, apptFields, addAppt, apptWho, apptIds, apptSort };
 Object.defineProperty(ctx, 'S', { get: () => S });
-const mods = { calendar: calendarMod.make(ctx), builder: builderMod.make(ctx), diet: dietMod.make(ctx), sheets: sheetsMod.make(ctx) };
+const mods = { calendar: calendarMod.make(ctx), builder: builderMod.make(ctx), diet: dietMod.make(ctx), sheets: sheetsMod.make(ctx), activity: activityMod.make(ctx) };
 Object.values(mods).forEach((m) => { Object.assign(V, m.V); Object.assign(ACT, m.ACT); });
 
 // ---------- Router ----------
@@ -588,6 +689,7 @@ const NAV = [
   ['Negocio', [['#/pagos', 'Pagos', 'dollar'], ['#/ajustes', 'Ajustes', 'cog']]],
 ];
 function renderMain() {
+  setTimeout(() => mods.activity?.hydrate(), 0);
   let [seg, id] = (location.hash.slice(2) || '').split('/');
   if (seg === 'rutinas') seg = 'entrenamientos'; if (seg === 'dietas') seg = 'nutricion';
   $('#main').innerHTML = (V[seg || 'home'] || (() => '<p>No encontrado</p>'))(id);
@@ -598,8 +700,8 @@ function render() {
   if (seg === 'rutinas') seg = 'entrenamientos'; if (seg === 'dietas') seg = 'nutricion';
   const name = seg || 'home';
   renderMain();
-  const base = { cliente: 'clientes', rutina: 'entrenamientos', dieta: 'nutricion', hoja: 'clientes', hojar: 'entrenamientos', hojad: 'nutricion' }[name] || name;
-  $('#nav').innerHTML = `<div class="brand">${logoFull(38)}</div>` + NAV.map(([sec, items]) => `<div class="ns">${sec}</div>` + items.map(([h, l, i]) => `<a href="${h}" class="${h === '#/' + (base === 'home' ? '' : base) ? 'on' : ''}">${ic(i)}<span>${l}</span></a>`).join('')).join('') + `<div class="who"><span class="av sm" style="--h:${hue(USER.email)}">${esc(initials(S.settings?.brand || USER.email))}</span><div><b>${esc(S.settings?.brand || 'Mi cuenta')}</b><small>${esc(USER.email)}</small></div><button data-act="logout" title="Cerrar sesión">${ic('out', 16)}</button></div>`;
+  const base = { cliente: 'clientes', rutina: 'entrenamientos', dieta: 'nutricion', hoja: 'clientes', hojar: 'entrenamientos', hojad: 'nutricion', recibo: 'pagos' }[name] || name;
+  $('#nav').innerHTML = `<div class="brand">${logoFull(38)}</div><button class="navsearch" data-act="search">${ic('search', 15)}<span>Buscar…</span><kbd>Ctrl K</kbd></button>` + NAV.map(([sec, items]) => `<div class="ns">${sec}</div>` + items.map(([h, l, i]) => `<a href="${h}" class="${h === '#/' + (base === 'home' ? '' : base) ? 'on' : ''}">${ic(i)}<span>${l}</span></a>`).join('')).join('') + `<div class="who"><span class="av sm" style="--h:${hue(USER.email)}">${esc(initials(S.settings?.brand || USER.email))}</span><div><b>${esc(S.settings?.brand || 'Mi cuenta')}</b><small>${esc(USER.email)}</small></div><button data-act="logout" title="Cerrar sesión">${ic('out', 16)}</button></div>`;
   window.scrollTo(0, 0);
 }
 window.addEventListener('hashchange', () => { closeModal(); render(); });
@@ -624,6 +726,7 @@ async function start() {
   if (!data || before !== LIB_VERSION) await flush();
   document.body.classList.add('in'); $('#login').hidden = true;
   render();
+  mods.activity.refresh(false);
 }
 
 // ---------- Login ----------

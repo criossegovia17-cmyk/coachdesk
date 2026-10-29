@@ -97,7 +97,7 @@ export function make(x) {
       const v = await x.form('Nueva cita', x.apptFields(), { date: el.dataset.d || today(), time: el.dataset.t || '07:00', duration: 60, type: 'individual', status: 'programada', clientIds: [], groupId: '' });
       if (v) { cal.sel = v.date; x.addAppt(v); }
     },
-    'appt-status'(el) { const a = x.S.appointments.find((q) => q.id === el.dataset.id); a.status = el.dataset.s; x.save(); x.render(); },
+    'appt-status'(el) { const a = x.S.appointments.find((q) => q.id === el.dataset.id); a.status = el.dataset.s; x.onDone?.(a); x.save(); x.render(); },
   };
   return { V, ACT };
 }
