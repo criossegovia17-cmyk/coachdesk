@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a1020">
+<title>C-Lab · Coaching Lab</title>
+<link rel="icon" href="logo-mark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=16">
+</head>
+<body>
+<section id="login">
+  <div class="lart">
+    <div id="lbrand"></div>
+    <div>
+      <h2>Entrena mejor.<br><em>Administra menos.</em></h2>
+      <p>La plataforma para entrenadores que une clientes, rutinas con biblioteca visual, nutrición por porciones, agenda y cobros.</p>
+      <ul><li>Programas por perfil: béisbol, hipertrofia y salud</li><li>Menús con macros, equivalencias y lista del súper</li><li>Entrenamiento grupal adaptado con IA</li><li>PDF profesionales para cada cliente</li></ul>
+    </div>
+    <small>© C-Lab · Coaching Lab</small>
+  </div>
+  <div class="lform">
+    <form id="lform">
+      <h2 id="ltitle">Entrar</h2>
+      <p class="mute">Accede a tu espacio de trabajo.</p>
+      <label class="fl">Correo</label><input id="lemail" type="email" required autocomplete="email">
+      <label class="fl">Contraseña (mínimo 6 caracteres)</label><input id="lpass" type="password" required minlength="6" autocomplete="current-password">
+      <div class="bar"><button class="pri lg" id="lsubmit">Entrar</button><a href="#" id="lswitch">Crear cuenta</a><span class="grow"></span><a href="#" id="lreset">Olvidé mi contraseña</a></div>
+      <p id="lmsg"></p>
+      <p class="mini">Al crear tu cuenta aceptas los <a href="terminos.html">Términos</a> y el <a href="privacidad.html">Aviso de privacidad</a>.</p>
+    </form>
+  </div>
+</section>
+<button id="burger" aria-label="Menú"><span id="burgerlogo"></span><span style="margin-left:auto">☰</span></button>
+<aside id="nav"></aside>
+<nav id="tabbar"></nav>
+<main id="main"></main>
+<div id="modal" hidden></div>
+<div id="toast" hidden></div>
+<script type="module" src="app.js?v=16"></script>
+</body>
+</html>

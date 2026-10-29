@@ -1,20 +1,24 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-import { demo } from './seed.js?v=10';
-import { exercises as LIB, mergeLibrary, LIB_VERSION } from './library.js?v=10';
-import { plan as rulesPlan } from './planner.js?v=10';
-import { generateProgram } from './program.js?v=10';
-import { latestWeight, RESTRICTIONS, ACTIVITY, mergeFoods, setFoods, FOODS, itemsText, mealTotals } from './nutrition.js?v=10';
-import { logoMark, logoFull } from './brand.js?v=10';
-import * as calendarMod from './calendar.js?v=10';
-import * as builderMod from './builder.js?v=10';
-import * as dietMod from './diet.js?v=10';
-import * as sheetsMod from './sheets.js?v=10';
-import * as activityMod from './activity.js?v=10';
+import { demo } from './seed.js?v=16';
+import { exercises as LIB, mergeLibrary, LIB_VERSION } from './library.js?v=16';
+import { plan as rulesPlan } from './planner.js?v=16';
+import { generateProgram } from './program.js?v=16';
+import { latestWeight, RESTRICTIONS, ACTIVITY, mergeFoods, setFoods, FOODS, itemsText, mealTotals } from './nutrition.js?v=16';
+import { logoMark, logoFull } from './brand.js?v=16';
+import * as calendarMod from './calendar.js?v=16';
+import * as builderMod from './builder.js?v=16';
+import * as dietMod from './diet.js?v=16';
+import * as sheetsMod from './sheets.js?v=16';
+import * as activityMod from './activity.js?v=16';
+import * as liveMod from './live.js?v=16';
+import * as toolsMod from './tools.js?v=16';
+import * as catalogMod from './catalog.js?v=16';
+import { CLAB } from './config.js?v=16';
 
 const SB_URL = 'https://qqgdbdbdfecppehwyezm.supabase.co';
 const SB_KEY = 'sb_publishable_ljrk5vR6YAvpHs68RehEYw_mLclqIcu';
 const sb = createClient(SB_URL, SB_KEY);
-let USER = null;
+let USER = null, SUB = null;
 
 // ---------- Utilidades ----------
 const $ = (s) => document.querySelector(s);
@@ -30,7 +34,7 @@ const hue = (s) => [...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
 const LEVELS = [['principiante', 'Principiante'], ['intermedio', 'Intermedio'], ['avanzado', 'Avanzado']];
 const TRACKS = [['general', 'General / salud'], ['beisbol', 'Béisbol'], ['fisicoculturismo', 'Fisicoculturismo / hipertrofia']];
 const TRACK_NAME = { general: 'General', beisbol: 'Béisbol', fisicoculturismo: 'Fisicoculturismo' };
-const PATTERNS = ['sentadilla', 'bisagra', 'empuje', 'tirón', 'core', 'rotacional', 'pliometría', 'isométrico', 'cuidado del brazo', 'cardio', 'aislamiento'];
+const PATTERNS = ['sentadilla', 'bisagra', 'empuje', 'tirón', 'core', 'rotacional', 'pliometría', 'isométrico', 'cuidado del brazo', 'cardio', 'aislamiento', 'movilidad'];
 const GROUPS = ['pecho', 'espalda', 'hombro', 'bíceps', 'tríceps', 'cuádriceps', 'isquios', 'glúteo', 'pantorrilla', 'abdomen', 'lumbar', 'trapecio', 'antebrazo', 'cuerpo completo'];
 const TYPES = ['fuerza', 'potencia', 'isométrico', 'core', 'cardio', 'cuidado del brazo', 'movilidad'];
 const EQUIP = ['mancuernas', 'barra', 'kettlebell', 'banda', 'banco', 'polea', 'máquina', 'balón medicinal', 'caja', 'barra de dominadas', 'cuerda', 'rueda', 'trineo', 'cuerda pesada'];
@@ -46,8 +50,26 @@ const ex = (id) => S.exercises.find((e) => e.id === id);
 const find = (col, id) => S[col].find((x) => x.id === id);
 const del = (col, id) => { S[col] = S[col].filter((x) => x.id !== id); };
 
-const flush = async () => { tmr = null; const { error } = await sb.from('coach_data').upsert({ user_id: USER.id, data: S, updated_at: new Date().toISOString() }); if (error) toast('Error al guardar: ' + error.message); };
-const save = () => { clearTimeout(tmr); tmr = setTimeout(flush, 400); };
+const proActive = () => SUB && SUB.plan === 'pro' && SUB.status === 'active';
+const trialLeft = () => (SUB ? Math.ceil((new Date(SUB.trial_ends_at) - Date.now()) / 864e5) : 99);
+const locked = () => CLAB.enforce && SUB && !proActive() && trialLeft() <= 0;
+let SERVER_TS = null, CONFLICT = false;
+const flush = async (force) => {
+  tmr = null; if (CONFLICT && !force) return;
+  if (locked()) { if (!window.__lockedShown) { window.__lockedShown = true; toast('Tu prueba terminó: la cuenta está en solo lectura'); } return; }
+  if (!force && SERVER_TS) {
+    const { data: cur } = await sb.from('coach_data').select('updated_at').eq('user_id', USER.id).maybeSingle();
+    if (cur && cur.updated_at !== SERVER_TS) { CONFLICT = true; showConflict(); return; }
+  }
+  const { data, error } = await sb.from('coach_data').upsert({ user_id: USER.id, data: S, updated_at: new Date().toISOString() }).select('updated_at').single();
+  if (error) return toast('Error al guardar: ' + error.message);
+  SERVER_TS = data.updated_at; CONFLICT = false;
+};
+function showConflict() {
+  const m = $('#modal'); m.hidden = false;
+  m.innerHTML = `<div class="dlg"><h2>Cambios en otro dispositivo</h2><p>Se guardaron cambios desde otra pestaña o dispositivo. Para no perder información, <b>recarga</b> y vuelve a hacer tu último cambio.</p><div class="bar end"><button data-act="force-save">Sobrescribir con lo que tengo aquí</button><button class="pri" data-act="reload">Recargar ahora</button></div></div>`;
+}
+const save = () => { clearTimeout(tmr); tmr = setTimeout(() => flush(), 400); };
 window.addEventListener('beforeunload', () => { if (tmr) flush(); });
 const toast = (m) => { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), 2600); };
 const closeModal = () => { $('#modal').hidden = true; $('#modal').innerHTML = ''; };
@@ -76,6 +98,10 @@ const IC = {
   trash: 'M3 6h18 M8 6V4h8v2 M19 6l-1 14H6L5 6', edit: 'M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z',
   eye: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', back: 'M15 18l-6-6 6-6',
   chat: 'M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2-5.4A8.5 8.5 0 1 1 21 11.5z', menu: 'M3 6h18 M3 12h18 M3 18h18',
+  sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z M12 1v2 M12 21v2 M4.22 4.22l1.42 1.42 M18.36 18.36l1.42 1.42 M1 12h2 M21 12h2 M4.22 19.78l1.42-1.42 M18.36 5.64l1.42-1.42',
+  moon: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
+  auto: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 2v20 M12 2a10 10 0 0 1 0 20',
+  calc: 'M5 2h14a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z M8 6h8 M8 11h.01 M12 11h.01 M16 11h.01 M8 15h.01 M12 15h.01 M16 15h.01 M8 19h.01 M12 19h.01 M16 19h.01',
   heart: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z',
 };
 const ic = (n, s = 18) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${IC[n]}"/></svg>`;
@@ -154,12 +180,13 @@ V.home = () => {
   active.forEach((c) => { if (typeof c.credits === 'number' && c.credits <= 1) alerts.push(['warn', `${esc(c.name)} tiene ${c.credits} sesión(es) restante(s): ofrece renovar el paquete`, '#/cliente/' + c.id]); });
   mods.activity.logs.filter((l) => !l.handled).forEach((l) => {
     if (l.kind === 'checkin' && l.data.pain) alerts.unshift(['bad', `${esc(cl(l.client_id)?.name || 'Cliente')} reportó molestia: ${esc(l.data.pain)}`, '#/cliente/' + l.client_id]);
+    if (l.kind === 'message' && l.data.from === 'client') alerts.unshift(['info', `${esc(cl(l.client_id)?.name || 'Cliente')} te escribió: “${esc(String(l.data.text).slice(0, 70))}”`, '#/cliente/' + l.client_id]);
     if (l.kind === 'intake') alerts.unshift(['info', `${esc(cl(l.client_id)?.name || 'Cliente')} llenó su ficha inicial: revísala y aplícala`, '#/cliente/' + l.client_id]);
   });
   const brand = S.settings?.brand;
   const hr = new Date().getHours();
   return page(`${hr < 12 ? 'Buenos días' : hr < 19 ? 'Buenas tardes' : 'Buenas noches'}${brand ? ', ' + esc(brand) : ''}`, new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }), `${btn('Nueva cita', 'cal-new', `data-d="${t}"`, 'cal')}${btn('Nuevo cliente', 'client-new', '', 'plus', 'pri')}`,
-    `${onboarding()}<div class="kpis five">
+    `${trialBanner()}${onboarding()}<div class="kpis five">
       <div class="kpi"><span class="k-ic">${ic('users')}</span><small>Clientes activos</small><b>${active.length}</b></div>
       <div class="kpi"><span class="k-ic g">${ic('dollar')}</span><small>Cobrado este mes</small><b>${money(income)}</b></div>
       <div class="kpi"><span class="k-ic w">${ic('clip')}</span><small>Por cobrar</small><b>${money(pend.reduce((a, p) => a + p.amount, 0))}</b><em>${pend.length} pago(s)</em></div>
@@ -211,7 +238,7 @@ const newClientDefaults = () => ({ level: 'principiante', track: 'general', acti
 V.cliente = (id) => {
   const c = cl(id); if (!c) return '<p>Cliente no encontrado.</p>';
   const t = tab.cliente || 'resumen';
-  const nl = (mods.activity.logs || []).filter((l) => l.client_id === c.id && !l.handled && l.kind !== 'message').length;
+  const nl = (mods.activity.logs || []).filter((l) => l.client_id === c.id && !l.handled).length;
   const tabs = [['resumen', 'Resumen'], ['actividad', `Actividad${nl ? ` <span class="badge">${nl}</span>` : ''}`], ['programa', 'Programa'], ['nutricion', 'Nutrición'], ['progreso', 'Progreso'], ['carpeta', 'Carpeta'], ['pagos', 'Pagos'], ['ficha', 'Ficha de salud']];
   const r = S.routines.find((x) => x.id === c.routineId), d = S.diets.find((x) => x.id === c.dietId);
   let body = '';
@@ -336,7 +363,7 @@ V.biblioteca = () => {
   const q = f.q.toLowerCase();
   const list = S.exercises.filter((e) => (!q || e.name.toLowerCase().includes(q) || e.muscle.includes(q)) && (!f.pattern || e.pattern === f.pattern) && (!f.grp || e.muscle === f.grp) && (!f.type || e.type === f.type) && (!f.level || e.level === f.level) && (!f.tag || (e.tags || []).includes(f.tag)));
   const sel = (id, label, arr, v) => `<select id="${id}"><option value="">${label}</option>${arr.map((x) => `<option ${x === v ? 'selected' : ''}>${x}</option>`).join('')}</select>`;
-  return page('Biblioteca de ejercicios', `${S.exercises.length} ejercicios con ejemplo y variantes`, btn('Nuevo ejercicio', 'ex-new', '', 'plus', 'pri'),
+  return page('Biblioteca de ejercicios', `${S.exercises.length} ejercicios con ejemplo y variantes`, `${btn('Catálogo ampliado (800+)', 'cat-open', '', 'grid')}${btn('Nuevo ejercicio', 'ex-new', '', 'plus', 'pri')}`,
     `<div class="bar filters"><div class="search">${ic('search', 16)}<input id="lq" placeholder="Buscar ejercicio o músculo…" value="${esc(f.q)}"></div>
       ${sel('lpat', 'Patrón', PATTERNS, f.pattern)}${sel('lgrp', 'Músculo', GROUPS, f.grp)}${sel('ltype', 'Tipo', TYPES, f.type)}${sel('llvl', 'Nivel', LEVELS.map((x) => x[0]), f.level)}
       <select id="ltag"><option value="">Todos los perfiles</option>${opts([['beisbol', 'Béisbol'], ['hipertrofia', 'Hipertrofia'], ['general', 'General']], f.tag)}</select></div>
@@ -387,11 +414,11 @@ function renderPlan(r) {
   ${r.perClient.map((c) => `<div class="att"><div class="row sp"><span>${esc(c.name)} <span class="mute">· ${esc(c.notes)}</span></span><b>${c.attentionMin} min</b></div><div class="meter"><i style="width:${(c.attentionMin / maxA) * 100}%"></i></div></div>`).join('')}
   ${r.rotation?.length ? `<h3>Dónde enfocarte en cada estación</h3><div class="tw"><table><tr><th>Ronda</th>${r.stations.map((s) => `<th>Est. ${s.n}</th>`).join('')}</tr>${Array.from({ length: r.rounds }, (_, i) => `<tr><td>${i + 1}</td>${r.stations.map((s) => `<td>${esc(nm(rot[i + 1]?.[s.n]))}</td>`).join('')}</tr>`).join('')}</table></div>` : ''}
   <h3>Enfriamiento</h3><ul>${r.cooldown.map((x) => `<li>${esc(x)}</li>`).join('')}</ul><h3>Tips</h3><ul>${r.coachTips.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-  <div class="bar">${btn('Agendar como cita grupal', 'plan-sched', '', 'cal', 'pri')}<button onclick="print()">${ic('print', 16)}Imprimir</button></div></section>`;
+  <div class="bar">${btn('Iniciar modo sesión (pantalla completa)', 'live-start', '', 'zap', 'pri')}${btn('Agendar como cita grupal', 'plan-sched', '', 'cal')}<button onclick="print()">${ic('print', 16)}Imprimir</button></div></section>`;
 }
 
 V.ajustes = () => page('Ajustes', 'Tu marca, IA, cuenta y respaldos', '',
-  `<div class="cols"><section class="card"><h3>Tu marca</h3><label class="fl">Tu nombre o el de tu negocio (aparece en los PDF y en el saludo)</label><input id="brand" value="${esc(S.settings?.brand || '')}" placeholder="Ej. CR Athletic Lab"><label class="fl">Moneda</label><div class="seg">${[['MXN', 'Pesos (MXN)'], ['USD', 'Dólares (USD)']].map(([k, l]) => `<button class="${(S.settings?.currency || 'MXN') === k ? 'on' : ''}" data-act="currency-set" data-v="${k}">${l}</button>`).join('')}</div><div class="bar">${btn('Guardar', 'brand-save', '', 'check', 'pri')}</div></section>
+  `${planCard()}<div class="cols"><section class="card"><h3>Tu marca</h3><label class="fl">Tu nombre o el de tu negocio (aparece en los PDF y en el saludo)</label><input id="brand" value="${esc(S.settings?.brand || '')}" placeholder="Ej. CR Athletic Lab"><label class="fl">Moneda</label><div class="seg">${[['MXN', 'Pesos (MXN)'], ['USD', 'Dólares (USD)']].map(([k, l]) => `<button class="${(S.settings?.currency || 'MXN') === k ? 'on' : ''}" data-act="currency-set" data-v="${k}">${l}</button>`).join('')}</div><div class="bar">${btn('Guardar', 'brand-save', '', 'check', 'pri')}</div></section>
   <section class="card"><h3>Cuenta</h3><p>${esc(USER.email)}</p><div class="bar">${btn('Cerrar sesión', 'logout', '', 'out')}</div></section></div>
   <section class="card"><h3>IA (Claude)</h3><p class="mute">Con tu API key de Anthropic, "Entrenar en grupo" usa IA para razonar sobre cada cliente. Sin key funciona igual con el sistema de reglas. La key se guarda solo en tu cuenta.</p>
   <p>Estado: ${S.settings?.apiKey ? '<span class="tag ok">API key configurada</span>' : '<span class="tag warn">Sin API key (usa reglas)</span>'}</p><div class="row"><input id="key" type="password" placeholder="sk-ant-…" autocomplete="off"><button class="pri" data-act="key-save">Guardar</button></div></section>
@@ -472,7 +499,7 @@ const ACT = {
   },
   'prog-save'(el) {
     const c = cl(el.dataset.id), r = ui.draft.routine; const rt = { id: uid('r'), name: r.name, goal: r.goal, days: r.days, program: r.program };
-    S.routines.push(rt); c.routineId = rt.id; ui.draft = null; save(); render(); toast('Programa guardado y asignado');
+    S.routines.push(rt); c.routineId = rt.id; c.programStart = today(); ui.draft = null; save(); render(); toast('Programa guardado y asignado');
   },
   'prog-drop'() { ui.draft = null; render(); },
   async 'group-new'() { const v = await groupForm({ clientIds: [] }); if (v) { S.groups.push({ id: uid('g'), ...v }); save(); render(); } },
@@ -494,7 +521,7 @@ const ACT = {
   'prog-tpl'(el) {
     const id = $('#tpl-sel').value; if (!id) return toast('Elige una rutina');
     const r = find('routines', id), c = cl(el.dataset.id), n = { ...JSON.parse(JSON.stringify(r)), id: uid('r'), name: `${c.name.split(' ')[0]} · ${r.name}` };
-    S.routines.push(n); c.routineId = n.id; save(); render(); toast('Rutina copiada y asignada');
+    S.routines.push(n); c.routineId = n.id; c.programStart = today(); save(); render(); toast('Rutina copiada y asignada');
   },
   'routine-del'(el) { if (confirm('¿Eliminar rutina?')) { del('routines', el.dataset.id); S.clients.forEach((c) => c.routineId === el.dataset.id && (c.routineId = '')); save(); render(); } },
   'rday-add'(el) { const r = find('routines', el.dataset.id); r.days.push({ name: 'Día ' + (r.days.length + 1), items: [] }); save(); render(); },
@@ -566,6 +593,10 @@ const ACT = {
     const v = await form('Agendar sesión grupal', [{ k: 'date', l: 'Fecha', t: 'date', req: 1 }, { k: 'time', l: 'Hora', t: 'time', req: 1 }], { date: today(), time: '07:00' }); if (!v) return;
     addAppt({ ...v, duration: ui.result.totalMinutes, type: 'grupal', groupId: '', clientIds: ui.plan.clientIds, status: 'programada', notes: ui.result.title });
   },
+  subscribe() {
+    if (!CLAB.checkoutUrl) return toast('Los pagos se activarán pronto. Tu cuenta sigue funcionando sin cargo.');
+    const u = new URL(CLAB.checkoutUrl); u.searchParams.set('client_reference_id', USER.id); u.searchParams.set('prefilled_email', USER.email); window.open(u.href, '_blank');
+  },
   'currency-set'(el) { (S.settings ||= {}).currency = el.dataset.v; save(); render(); },
   'csv-payments'() { download(`pagos-${today()}.csv`, csv([['Cliente', 'Concepto', 'Monto', 'Vence', 'Estado', 'Fecha de pago', 'Método'], ...S.payments.map((p) => [cl(p.clientId)?.name || '', p.concept, p.amount, p.due, p.status, p.paidOn || '', p.method || ''])])); },
   'csv-clients'() { download(`clientes-${today()}.csv`, csv([['Nombre', 'Teléfono', 'Correo', 'Objetivo', 'Tipo', 'Nivel', 'Plan', 'Activo', 'Sesiones restantes'], ...S.clients.map((c) => [c.name, c.phone, c.email, c.goal, TRACK_NAME[c.track || 'general'], c.level, S.plans.find((p) => p.id === c.planId)?.name || '', c.active ? 'Sí' : 'No', c.credits ?? ''])])); },
@@ -575,6 +606,10 @@ const ACT = {
   'brand-save'() { (S.settings ||= {}).brand = $('#brand').value.trim(); save(); toast('Guardado'); },
   'key-save'() { (S.settings ||= {}).apiKey = $('#key').value.trim(); save(); toast(S.settings.apiKey ? 'API key guardada' : 'API key eliminada'); render(); },
   async logout() { await flush(); await sb.auth.signOut(); location.reload(); },
+  reload() { location.reload(); },
+  async 'force-save'() { closeModal(); await flush(true); toast('Datos guardados'); },
+  theme() { const n = THEMES[(THEMES.indexOf(getTheme()) + 1) % 3]; try { localStorage.setItem('clab-theme', n); } catch {} applyTheme(); render(); toast('Tema: ' + { auto: 'automático', light: 'claro', dark: 'oscuro' }[n]); },
+  menu() { document.body.classList.toggle('navopen'); },
   demo() { if (S.clients.length && !confirm('Se agregarán los datos de ejemplo a los tuyos.')) return; const d = demo(); for (const k of Object.keys(d)) S[k] = [...S[k], ...d[k]]; migrate(); save(); render(); toast('Datos de ejemplo agregados'); },
   export() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' })); a.download = `coachdesk-respaldo-${today()}.json`; a.click(); },
   reset() { if (!confirm('Esto BORRA todos tus clientes, rutinas, pagos y citas. ¿Seguro?')) return; S = blank(); save(); render(); toast('Cuenta vaciada'); },
@@ -619,6 +654,22 @@ document.addEventListener('input', (e) => {
   }
 });
 
+// ---------- Plan y suscripción ----------
+function planCard() {
+  if (!SUB) return '';
+  const left = trialLeft(), cur = S.settings?.currency === 'USD' ? 'USD' : 'MXN';
+  if (proActive()) return `<section class="card plan pro"><div class="row sp"><div><h3>Tu plan</h3><p class="mute" style="margin:2px 0 0">${SUB.provider === 'owner' ? 'Cuenta del propietario: acceso completo.' : 'Gracias por apoyar a C-Lab.'}</p></div><span class="tag ok">Pro activo</span></div></section>`;
+  return `<section class="card plan"><div class="row sp"><div><h3>Tu plan</h3><p class="mute" style="margin:2px 0 0">${left > 0 ? `Prueba gratuita: te quedan <b>${left}</b> día(s).` : 'Tu prueba gratuita terminó.'}</p></div><span class="tag ${left > 0 ? 'warn' : 'bad'}">${left > 0 ? 'Prueba' : 'Vencida'}</span></div>
+    <div class="meter" style="margin:10px 0"><i style="width:${Math.max(0, Math.min(100, (CLAB.trialDays - left) / CLAB.trialDays * 100))}%"></i></div>
+    <ul class="plain">${CLAB.features.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
+    <div class="bar">${btn(`Plan Pro · ${CLAB.price[cur]} ${cur}/mes`, 'subscribe', '', 'zap', 'pri')}<span class="mini">${CLAB.checkoutUrl ? 'Pago seguro en una página externa.' : 'Los pagos se activarán pronto: por ahora tu cuenta funciona sin cargo.'}</span></div></section>`;
+}
+function trialBanner() {
+  if (!SUB || proActive()) return '';
+  const left = trialLeft(); if (left > 7) return '';
+  return `<a class="al ${left > 0 ? 'warn' : 'bad'}" href="#/ajustes">${ic('alert', 16)}<span>${left > 0 ? `Tu prueba gratuita termina en ${left} día(s).` : 'Tu prueba gratuita terminó.'} Revisa tu plan.</span></a>`;
+}
+
 // ---------- Onboarding, actividad, búsqueda, recibos ----------
 function onboarding() {
   if (S.settings?.hideOnboarding) return '';
@@ -628,8 +679,8 @@ function onboarding() {
   return `<section class="card onb"><div class="row sp"><div class="grow"><h3>Primeros pasos · ${done}/${steps.length}</h3><div class="meter"><i style="width:${done / steps.length * 100}%"></i></div></div>${btn('Ocultar', 'onb-hide', '', '', 'sm')}</div><div class="onbg">${steps.map(([l, ok, h]) => `<a class="onbs ${ok ? 'ok' : ''}" href="${h}"><span>${ok ? '✓' : ''}</span>${l}</a>`).join('')}</div></section>`;
 }
 function activityCard() {
-  const L = mods.activity.logs.filter((l) => l.kind !== 'message').slice(0, 6), nu = mods.activity.logs.filter((l) => !l.handled && l.kind !== 'message').length;
-  const txt = (l) => ({ workout: `completó ${esc(l.data.dayName || 'un entrenamiento')}`, checkin: `envió su check-in (adh ${l.data.adherence}/5)`, intake: 'llenó su ficha inicial' }[l.kind]);
+  const L = mods.activity.logs.filter((l) => l.kind !== 'message' || l.data.from === 'client').slice(0, 6), nu = mods.activity.logs.filter((l) => !l.handled).length;
+  const txt = (l) => ({ workout: `completó ${esc(l.data.dayName || 'un entrenamiento')}`, checkin: `envió su check-in (adh ${l.data.adherence}/5)`, intake: 'llenó su ficha inicial', message: `te escribió: “${esc(String(l.data.text || '').slice(0, 50))}”` }[l.kind]);
   return `<section class="card"><div class="row sp"><h3>Actividad de tus clientes ${nu ? `<span class="badge">${nu}</span>` : ''}</h3><span class="mute small">Desde el portal</span></div>${L.length ? L.map((l) => `<a class="li act" href="#/cliente/${l.client_id}" data-act="open-act" data-id="${l.client_id}"><b>${fdate(l.created_at.slice(0, 10))}</b><span><b style="min-width:0">${esc(cl(l.client_id)?.name || 'Cliente')}</b> ${txt(l)}</span>${l.handled ? '' : '<span class="tag warn">nuevo</span>'}</a>`).join('') : '<p class="mute empty">Cuando tus clientes usen el portal verás aquí sus entrenamientos y check-ins. Activa el portal desde la pestaña Actividad de cada cliente.</p>'}</section>`;
 }
 const csv = (rows) => rows.map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -678,13 +729,19 @@ document.addEventListener('input', (e) => { if (e.target.id === 'sq') { ui.sIdx 
 // ---------- Módulos ----------
 const ctx = { sb, user: () => USER, onDone, ui, esc, ic, btn, page, thumb, avatar, form, dialog, closeModal, save, render, renderMain, toast, today, fdate, money, uid, cl, ex, find, del, plain, opts, copy, $, PATTERNS, GROUPS, TYPES, LEVELS, EQUIP, TRACK_NAME, apptFields, addAppt, apptWho, apptIds, apptSort };
 Object.defineProperty(ctx, 'S', { get: () => S });
-const mods = { calendar: calendarMod.make(ctx), builder: builderMod.make(ctx), diet: dietMod.make(ctx), sheets: sheetsMod.make(ctx), activity: activityMod.make(ctx) };
+const mods = { calendar: calendarMod.make(ctx), builder: builderMod.make(ctx), diet: dietMod.make(ctx), sheets: sheetsMod.make(ctx), activity: activityMod.make(ctx), live: liveMod.make(ctx), tools: toolsMod.make(ctx), catalog: catalogMod.make(ctx) };
 Object.values(mods).forEach((m) => { Object.assign(V, m.V); Object.assign(ACT, m.ACT); });
+
+// ---------- Tema ----------
+const THEMES = ['auto', 'light', 'dark'];
+const getTheme = () => { try { return localStorage.getItem('clab-theme') || 'auto'; } catch { return 'auto'; } };
+const applyTheme = () => { const t = getTheme(); if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; };
+applyTheme();
 
 // ---------- Router ----------
 const NAV = [
   ['Principal', [['#/', 'Inicio', 'home'], ['#/clientes', 'Clientes', 'users'], ['#/agenda', 'Agenda', 'cal']]],
-  ['Entrenamiento', [['#/entrenamientos', 'Rutinas', 'clip'], ['#/biblioteca', 'Biblioteca', 'grid'], ['#/entrenar', 'Entreno grupal IA', 'zap'], ['#/grupos', 'Grupos', 'team']]],
+  ['Entrenamiento', [['#/entrenamientos', 'Rutinas', 'clip'], ['#/biblioteca', 'Biblioteca', 'grid'], ['#/entrenar', 'Entreno grupal IA', 'zap'], ['#/grupos', 'Grupos', 'team'], ['#/herramientas', 'Herramientas', 'calc']]],
   ['Nutrición', [['#/nutricion', 'Dietas y alimentos', 'leaf']]],
   ['Negocio', [['#/pagos', 'Pagos', 'dollar'], ['#/ajustes', 'Ajustes', 'cog']]],
 ];
@@ -693,6 +750,7 @@ function renderMain() {
   let [seg, id] = (location.hash.slice(2) || '').split('/');
   if (seg === 'rutinas') seg = 'entrenamientos'; if (seg === 'dietas') seg = 'nutricion';
   $('#main').innerHTML = (V[seg || 'home'] || (() => '<p>No encontrado</p>'))(id);
+  if (seg === 'herramientas') mods.tools.init();
 }
 function render() {
   if (!S) return;
@@ -701,7 +759,8 @@ function render() {
   const name = seg || 'home';
   renderMain();
   const base = { cliente: 'clientes', rutina: 'entrenamientos', dieta: 'nutricion', hoja: 'clientes', hojar: 'entrenamientos', hojad: 'nutricion', recibo: 'pagos' }[name] || name;
-  $('#nav').innerHTML = `<div class="brand">${logoFull(38)}</div><button class="navsearch" data-act="search">${ic('search', 15)}<span>Buscar…</span><kbd>Ctrl K</kbd></button>` + NAV.map(([sec, items]) => `<div class="ns">${sec}</div>` + items.map(([h, l, i]) => `<a href="${h}" class="${h === '#/' + (base === 'home' ? '' : base) ? 'on' : ''}">${ic(i)}<span>${l}</span></a>`).join('')).join('') + `<div class="who"><span class="av sm" style="--h:${hue(USER.email)}">${esc(initials(S.settings?.brand || USER.email))}</span><div><b>${esc(S.settings?.brand || 'Mi cuenta')}</b><small>${esc(USER.email)}</small></div><button data-act="logout" title="Cerrar sesión">${ic('out', 16)}</button></div>`;
+  $('#nav').innerHTML = `<div class="brand">${logoFull(38)}</div><button class="navsearch" data-act="search">${ic('search', 15)}<span>Buscar…</span><kbd>Ctrl K</kbd></button>` + NAV.map(([sec, items]) => `<div class="ns">${sec}</div>` + items.map(([h, l, i]) => `<a href="${h}" class="${h === '#/' + (base === 'home' ? '' : base) ? 'on' : ''}">${ic(i)}<span>${l}</span></a>`).join('')).join('') + `<div class="who"><span class="av sm" style="--h:${hue(USER.email)}">${esc(initials(S.settings?.brand || USER.email))}</span><div><b>${esc(S.settings?.brand || 'Mi cuenta')}</b><small>${esc(USER.email)}</small></div><button data-act="theme" title="Tema: ${getTheme()}">${ic({ auto: 'auto', light: 'sun', dark: 'moon' }[getTheme()], 16)}</button><button data-act="logout" title="Cerrar sesión">${ic('out', 16)}</button></div>`;
+  $('#tabbar').innerHTML = [['#/', 'Inicio', 'home'], ['#/clientes', 'Clientes', 'users'], ['#/agenda', 'Agenda', 'cal'], ['#/entrenamientos', 'Rutinas', 'clip']].map(([h, l, i]) => `<a href="${h}" class="${h === '#/' + (base === 'home' ? '' : base) ? 'on' : ''}">${ic(i, 22)}<span>${l}</span></a>`).join('') + `<button data-act="menu">${ic('menu', 22)}<span>Más</span></button>`;
   window.scrollTo(0, 0);
 }
 window.addEventListener('hashchange', () => { closeModal(); render(); });
@@ -713,12 +772,14 @@ function migrate() {
   S.settings ||= {};
   S.exercises = mergeLibrary(S.exercises); S.libVersion = LIB_VERSION;
   S.foods = mergeFoods(S.foods); setFoods(S.foods);
-  S.clients.forEach((c) => { Object.assign(c, { track: c.track || 'general', injuries: c.injuries || [], measures: c.measures || [], files: c.files || [], checkins: c.checkins || [], equipment: c.equipment || ['mancuernas', 'banda', 'banco'], foodsAvoid: c.foodsAvoid || [], daysPerWeek: c.daysPerWeek || 3, sex: c.sex || 'm', activity: c.activity || 1.55 }); });
+  S.clients.forEach((c) => { if (c.routineId && !c.programStart) c.programStart = today(); Object.assign(c, { track: c.track || 'general', injuries: c.injuries || [], measures: c.measures || [], files: c.files || [], checkins: c.checkins || [], equipment: c.equipment || ['mancuernas', 'banda', 'banco'], foodsAvoid: c.foodsAvoid || [], daysPerWeek: c.daysPerWeek || 3, sex: c.sex || 'm', activity: c.activity || 1.55 }); });
   // rutinas viejas que apuntan a ejercicios que ya no existen
   S.routines.forEach((r) => r.days.forEach((d) => d.items.forEach((it) => { if (it.exId && !S.exercises.some((e) => e.id === it.exId)) it.exId = ''; })));
 }
 async function start() {
-  const { data, error } = await sb.from('coach_data').select('data').eq('user_id', USER.id).maybeSingle();
+  const { data, error } = await sb.from('coach_data').select('data, updated_at').eq('user_id', USER.id).maybeSingle();
+  if (!error) SERVER_TS = data?.updated_at || null;
+  { const { data: sub } = await sb.from('subscriptions').select('*').maybeSingle(); SUB = sub || null; }
   if (error) { $('#main').innerHTML = `<p>Error al cargar tus datos: ${esc(error.message)}</p>`; return; }
   S = data?.data && Object.keys(data.data).length ? data.data : blank();
   const before = S.libVersion;
@@ -731,7 +792,8 @@ async function start() {
 
 // ---------- Login ----------
 $('#lbrand').innerHTML = logoFull(46); $('#burgerlogo').innerHTML = logoFull(30);
-let mode = 'in';
+let mode = /registro/.test(location.search) ? 'up' : 'in';
+if (mode === 'up') { $('#ltitle').textContent = 'Crear cuenta de entrenador'; $('#lsubmit').textContent = 'Crear cuenta'; $('#lswitch').textContent = 'Ya tengo cuenta'; }
 const msg = (t, bad) => { const m = $('#lmsg'); m.textContent = t; m.style.color = bad ? 'var(--bad)' : 'var(--ok)'; };
 $('#lswitch').onclick = (e) => {
   e.preventDefault(); mode = mode === 'in' ? 'up' : 'in';

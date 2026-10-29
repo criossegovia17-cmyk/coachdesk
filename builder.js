@@ -1,4 +1,5 @@
 // Constructor de rutinas conectado a la biblioteca: se elige el ejercicio con imagen, filtros y compatibilidad con el cliente.
+import { load as loadCat, search as searchCat, loaded as catLoaded, getEx } from './catalog.js?v=16';
 export function make(x) {
   const { esc, ic, btn, $ } = x;
   const pick = (x.ui.pick ||= { routineId: null, day: 0, replace: null, q: '', grp: '', pattern: '', type: '', level: '', compat: true, added: 0 });
@@ -17,11 +18,20 @@ export function make(x) {
     const c = pickClient(), q = pick.q.toLowerCase();
     let list = x.S.exercises.filter((e) => (!q || e.name.toLowerCase().includes(q) || e.muscle.includes(q)) && (!pick.grp || e.muscle === pick.grp) && (!pick.pattern || e.pattern === pick.pattern) && (!pick.type || e.type === pick.type) && (!pick.level || e.level === pick.level));
     if (pick.compat && c) list = list.filter((e) => !issues(e, c).length);
-    return `<p class="mini">${list.length} ejercicios${pick.compat && c ? ` compatibles con ${esc(c.name.split(' ')[0])}` : ''}</p><div class="pkgrid">${list.map((e) => {
+    let extra = '';
+  if (pick.catalog) {
+    if (!catLoaded()) { loadCat().then(refreshResults).catch(() => {}); extra = '<p class="mute">Cargando catálogo ampliado…</p>'; }
+    else {
+      let more = searchCat({ q: pick.q, grp: pick.grp, pattern: pick.pattern, type: pick.type, level: pick.level }, x.S.exercises);
+      if (pick.compat && c) more = more.filter((e) => !issues(e, c).length);
+      extra = `<h4 style="margin-top:18px">Catálogo ampliado (en inglés)</h4><div class="pkgrid">${more.slice(0, 40).map((e) => `<button class="pk" data-act="pk-add" data-cat="${esc(e.id)}"><span class="pki">${e.images?.[0] ? `<img loading="lazy" src="${e.images[0]}" alt="" onerror="this.remove()">` : ''}</span><span class="pkb"><b>${esc(e.name)}</b><small>${esc(e.muscle)} · ${esc(e.type)} · ${e.level}</small></span><span class="pkp">${ic('plus', 16)}</span></button>`).join('') || '<p class="mute">Sin resultados en el catálogo.</p>'}</div>`;
+    }
+  }
+  return `<p class="mini">${list.length} ejercicios${pick.compat && c ? ` compatibles con ${esc(c.name.split(' ')[0])}` : ''}</p><div class="pkgrid">${list.map((e) => {
       const bad = issues(e, c);
       return `<button class="pk ${bad.length ? 'warn' : ''}" data-act="pk-add" data-id="${e.id}"><span class="pki">${e.images?.[0] ? `<img loading="lazy" src="${e.images[0]}" alt="" onerror="this.remove()">` : `<span class="noimg">${ic('zap', 22)}</span>`}</span>
         <span class="pkb"><b>${esc(e.name)}</b><small>${esc(e.muscle)} · ${esc(e.type || '')} · ${e.level}</small>${bad.length ? `<small class="bad">${bad.join(' · ')}</small>` : ''}</span><span class="pkp">${ic('plus', 16)}</span></button>`;
-    }).join('') || '<p class="mute">Sin resultados con esos filtros.</p>'}</div>`;
+    }).join('') || '<p class="mute">Sin resultados con esos filtros.</p>'}</div>${extra}`;
   }
   function openPicker() {
     const r = x.find('routines', pick.routineId), c = pickClient();
@@ -33,6 +43,7 @@ export function make(x) {
         <select data-pk="type"><option value="">Tipo</option>${x.TYPES.map((v) => `<option ${v === pick.type ? 'selected' : ''}>${v}</option>`).join('')}</select>
         <select data-pk="level"><option value="">Nivel</option>${['principiante', 'intermedio', 'avanzado'].map((v) => `<option ${v === pick.level ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
       <div class="chipbar"><button class="${pick.grp ? '' : 'on'}" data-act="pk-grp" data-v="">Todos</button>${x.GROUPS.map((g) => `<button class="${pick.grp === g ? 'on' : ''}" data-act="pk-grp" data-v="${g}">${g}</button>`).join('')}</div>
+      <label class="chk"><input type="checkbox" data-pk="catalog" ${pick.catalog ? 'checked' : ''}> Incluir el catálogo ampliado (800+ ejercicios, en inglés)</label>
       ${c ? `<label class="chk"><input type="checkbox" data-pk="compat" ${pick.compat ? 'checked' : ''}> Mostrar solo ejercicios compatibles con ${esc(c.name.split(' ')[0])} (lesiones y equipo)</label>` : ''}
       <div id="pk-res" class="pkres">${results()}</div></div>`;
   }
@@ -90,13 +101,15 @@ export function make(x) {
       if (!v) return;
       const cc = x.cl(v.clientId), n = Math.min(7, Math.max(1, Number(v.days) || 3));
       const r = { id: x.uid('r'), name: v.name || (cc ? `${cc.name.split(' ')[0]} · ${v.goal || 'Rutina'}` : v.goal || 'Nueva rutina'), goal: v.goal, days: Array.from({ length: n }, (_, i) => ({ name: `Día ${i + 1}`, items: [] })) };
-      x.S.routines.push(r); if (cc) cc.routineId = r.id; x.save(); location.hash = '#/rutina/' + r.id;
+      x.S.routines.push(r); if (cc) { cc.routineId = r.id; cc.programStart = x.today(); } x.save(); location.hash = '#/rutina/' + r.id;
     },
     'rb-add'(el) { Object.assign(pick, { routineId: el.dataset.id, day: +el.dataset.d, replace: null, added: 0 }); openPicker(); },
     'rb-swap'(el) { Object.assign(pick, { routineId: el.dataset.id, day: +el.dataset.d, replace: +el.dataset.i, added: 0 }); openPicker(); },
     'pk-grp'(el) { pick.grp = el.dataset.v; document.querySelectorAll('.chipbar button').forEach((b) => b.classList.toggle('on', b.dataset.v === pick.grp)); refreshResults(); },
     'pk-add'(el) {
-      const r = x.find('routines', pick.routineId), d = r.days[pick.day], e = x.ex(el.dataset.id);
+      const r = x.find('routines', pick.routineId), d = r.days[pick.day];
+      let e = x.ex(el.dataset.id);
+      if (el.dataset.cat) { e = getEx(el.dataset.cat); if (!e) return; x.S.exercises.push(e); }
       if (pick.replace != null) { d.items[pick.replace].exId = e.id; x.save(); x.closeModal(); x.render(); return; }
       const t = e.type === 'potencia' ? { sets: 4, reps: '3-5', rest: '90 s' } : e.type === 'isométrico' ? { sets: 3, reps: '30 s', rest: '60 s' } : e.pattern === 'aislamiento' ? { sets: 3, reps: '10-15', rest: '60 s' } : e.type === 'cuidado del brazo' || e.type === 'movilidad' ? { sets: 2, reps: '12', rest: '30 s' } : { sets: 3, reps: '8-10', rest: '90 s' };
       d.items.push({ exId: e.id, ...t, note: '' }); pick.added++; x.save(); refreshHead(); x.toast(`+ ${e.name}`);
@@ -112,7 +125,7 @@ export function make(x) {
     'rb-unassign'(el) { const c = x.cl(el.dataset.c); if (c) c.routineId = ''; x.save(); x.render(); },
   };
   document.addEventListener('change', (e) => {
-    if (e.target.id === 'rb-assign' && e.target.value) { const c = x.cl(e.target.value); c.routineId = e.target.dataset.id; x.save(); x.render(); }
+    if (e.target.id === 'rb-assign' && e.target.value) { const c = x.cl(e.target.value); c.routineId = e.target.dataset.id; c.programStart = x.today(); x.save(); x.render(); }
   });
   return { V, ACT };
 }

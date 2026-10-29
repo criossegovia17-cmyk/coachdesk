@@ -3,42 +3,126 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0a1020">
-<title>C-Lab · Coaching Lab</title>
+<meta name="theme-color" content="#070c18">
+<title>C-Lab · Software para entrenadores</title>
+<meta name="description" content="Clientes, rutinas con biblioteca visual, nutrición por porciones, portal del cliente, agenda y cobros. Todo en un solo lugar para entrenadores y coaches.">
 <link rel="icon" href="logo-mark.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="landing.css?v=16">
 </head>
 <body>
-<section id="login">
-  <div class="lart">
-    <div id="lbrand"></div>
-    <div>
-      <h2>Entrena mejor.<br><em>Administra menos.</em></h2>
-      <p>La plataforma para entrenadores que une clientes, rutinas con biblioteca visual, nutrición por porciones, agenda y cobros.</p>
-      <ul><li>Programas por perfil: béisbol, hipertrofia y salud</li><li>Menús con macros, equivalencias y lista del súper</li><li>Entrenamiento grupal adaptado con IA</li><li>PDF profesionales para cada cliente</li></ul>
-    </div>
-    <small>© C-Lab · Coaching Lab</small>
+<header class="top"><div class="wrap">
+  <a class="logo" href="./"><img src="logo-mark.svg" width="36" height="36" alt=""><b>C<i>-</i>LAB</b></a>
+  <nav class="links"><a href="#funciones">Funciones</a><a href="#portal">Portal del cliente</a><a href="#precios">Precios</a><a href="#preguntas">Preguntas</a></nav>
+  <span class="sp"></span>
+  <a class="btn" href="app.html">Entrar</a><a class="btn pri" href="app.html?registro=1">Empezar gratis</a>
+</div></header>
+
+<section class="hero"><div class="wrap">
+  <div>
+    <span class="eyebrow">Para entrenadores y coaches</span>
+    <h1 style="margin-top:20px">Entrena mejor.<br><span class="lime">Administra menos.</span></h1>
+    <p class="lead">Clientes, rutinas con biblioteca visual, nutrición por porciones, agenda, cobros y un portal para que tu cliente entrene desde el celular. Todo en un solo lugar.</p>
+    <div class="cta"><a class="btn pri lg" href="app.html?registro=1"><span>Probar <span id="trial">14</span> días gratis</span></a><a class="btn lg" href="#funciones">Ver cómo funciona</a></div>
+    <div class="trust"><span>Sin tarjeta</span><span>Funciona en celular</span><span>En español</span></div>
+    <div class="chips"><span>Entrenamiento personal</span><span>Béisbol</span><span>Hipertrofia</span><span>Grupos</span><span>Nutrición deportiva</span></div>
   </div>
-  <div class="lform">
-    <form id="lform">
-      <h2 id="ltitle">Entrar</h2>
-      <p class="mute">Accede a tu espacio de trabajo.</p>
-      <label class="fl">Correo</label><input id="lemail" type="email" required autocomplete="email">
-      <label class="fl">Contraseña (mínimo 6 caracteres)</label><input id="lpass" type="password" required minlength="6" autocomplete="current-password">
-      <div class="bar"><button class="pri lg" id="lsubmit">Entrar</button><a href="#" id="lswitch">Crear cuenta</a><span class="grow"></span><a href="#" id="lreset">Olvidé mi contraseña</a></div>
-      <p id="lmsg"></p>
-      <p class="mini">Al crear tu cuenta aceptas los <a href="terminos.html">Términos</a> y el <a href="privacidad.html">Aviso de privacidad</a>.</p>
-    </form>
+  <div class="mock">
+    <div class="win"><div class="bar"><i></i><i></i><i></i></div><div class="dash">
+      <div class="kp"><div><small>Clientes activos</small><b>24</b></div><div><small>Cobrado este mes</small><b>$38,400</b></div><div><small>Citas de hoy</small><b>6</b></div></div>
+      <div class="g2"><div class="pnl"><h4>Hoy</h4><div class="sess"><b>07:00</b><span>Grupo mañanas · circuito</span></div><div class="sess b"><b>09:30</b><span>Diego R. · potencia</span></div><div class="sess b"><b>18:00</b><span>Ana T. · revisión de medidas</span></div></div>
+      <div class="pnl"><h4>Ingresos</h4><div class="bars"><i style="height:34%"></i><i style="height:48%"></i><i style="height:42%"></i><i style="height:66%"></i><i style="height:78%"></i><i style="height:94%"></i></div></div></div>
+    </div></div>
+    <div class="phone"><div class="ph"><h5>Hola, Diego</h5><div class="sub">Subir velocidad y cuidar el brazo</div>
+      <div class="pc a"><small class="mute">TOCA HOY</small><div style="font:800 19px var(--display);text-transform:uppercase">Día A · Inferior + potencia</div>
+        <div class="ex"><img src="https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Standing_Long_Jump/0.jpg" alt=""><div>Salto de longitud<small>4 × 3</small></div></div>
+        <div class="ex"><img src="https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Goblet_Squat/0.jpg" alt=""><div>Sentadilla goblet<small>4 × 5</small></div></div>
+        <div class="ex"><img src="https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Hip_Thrust/0.jpg" alt=""><div>Hip thrust<small>3 × 8</small></div></div>
+        <span class="pb">Empezar entrenamiento</span></div>
+      <div class="pc"><b>Esta semana</b><div style="display:flex;gap:8px;margin-top:8px"><div style="flex:1;background:var(--card2);border-radius:10px;padding:8px;text-align:center"><b style="font:800 22px var(--display)">2</b><small style="display:block;color:var(--mute)">hechos</small></div><div style="flex:1;background:var(--card2);border-radius:10px;padding:8px;text-align:center"><b style="font:800 22px var(--display)">3</b><small style="display:block;color:var(--mute)">en tu plan</small></div></div></div></div></div>
   </div>
-</section>
-<button id="burger" aria-label="Menú"><span id="burgerlogo"></span><span style="margin-left:auto">☰</span></button>
-<aside id="nav"></aside>
-<main id="main"></main>
-<div id="modal" hidden></div>
-<div id="toast" hidden></div>
-<script type="module" src="app.js?v=10"></script>
+</div></section>
+
+<section id="funciones"><div class="wrap">
+  <div class="head"><span class="eyebrow">Todo lo que necesitas</span><h2 style="margin-top:16px">Deja las hojas de cálculo y los chats sueltos</h2><p>Un sistema pensado para el día a día de un entrenador, no para un gimnasio de cadena.</p></div>
+  <div class="grid">
+    <div class="feat"><div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><h3>Portal del cliente</h3><p>Tu cliente abre un enlace, ve su rutina con imágenes, registra series y peso, y te manda su check-in.</p></div>
+    <div class="feat"><div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg></div><h3>Biblioteca visual</h3><p>120 ejercicios en español con imágenes, variantes fácil y difícil, y un catálogo de 800+ para ampliar.</p></div>
+    <div class="feat"><div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><h3>Programas por perfil</h3><p>Béisbol por fase de temporada, hipertrofia con volumen por músculo y programas generales. Respeta lesiones.</p></div>
+    <div class="feat"><div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10zM2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg></div><h3>Nutrición por porciones</h3><p>Calcula metas, arma menús con alimentos de México, equivalencias y lista del súper. Ajuste por tendencia de peso.</p></div>
+    <div class="feat"><div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div><h3>Entreno grupal con IA</h3><p>Un circuito para todos, adaptado a nivel y lesiones de cada persona, con modo pantalla para tablet o TV.</p></div>
+    <div class="feat"><div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM16 2v4M8 2v4M3 10h18"/></svg></div><h3>Agenda con calendario</h3><p>Vista de mes y semana, citas que se repiten, paquetes de sesiones que descuentan solos y recordatorios por WhatsApp.</p></div>
+    <div class="feat"><div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><h3>Pagos y recibos</h3><p>Cobros del mes en un clic, vencidos a la vista, recibos en PDF, ingreso mensual recurrente y exportar a Excel.</p></div>
+    <div class="feat"><div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg></div><h3>PDF profesionales</h3><p>Plan de entrenamiento y alimentación con tu marca, imágenes de cada ejercicio e intercambios rápidos.</p></div>
+  </div>
+</div></section>
+
+<section id="portal" class="alt"><div class="wrap">
+  <div class="show"><div class="txt"><span class="eyebrow">Portal del cliente</span><h2>Tu cliente entrena. Tú ves el resultado.</h2><p>Sin descargar nada: abre un enlace privado, sigue su rutina con imágenes y temporizador de descanso, y registra cada serie.</p>
+    <ul><li>Ves entrenos completados, constancia y fuerza estimada</li><li>Check-ins semanales y ficha inicial que llena tu cliente</li><li>Funciona aunque no haya señal en el gimnasio</li><li>Mensajes con tu cliente dentro del portal</li></ul></div>
+    <div class="stage"><div class="phone"><div class="ph"><div style="display:flex;justify-content:space-between;align-items:center"><h5 style="font-size:20px">Sentadilla goblet</h5><b class="mute">00:18:42</b></div><div class="sub">4 × 5 · descanso 2 min</div>
+      <div class="pc"><img src="https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Goblet_Squat/0.jpg" style="width:100%;height:120px;object-fit:cover;border-radius:10px" alt="">
+        <div style="display:grid;grid-template-columns:24px 1fr 1fr 34px;gap:6px;margin-top:10px;align-items:center;font-size:12px"><span class="mute">1</span><b style="background:var(--bg);padding:8px;border-radius:8px;text-align:center">24 kg</b><b style="background:var(--bg);padding:8px;border-radius:8px;text-align:center">5</b><b style="background:#4cc38a;color:#06210f;border-radius:8px;text-align:center;padding:7px 0">✓</b>
+        <span class="mute">2</span><b style="background:var(--bg);padding:8px;border-radius:8px;text-align:center">24 kg</b><b style="background:var(--bg);padding:8px;border-radius:8px;text-align:center">5</b><b style="background:#4cc38a;color:#06210f;border-radius:8px;text-align:center;padding:7px 0">✓</b>
+        <span class="mute">3</span><b style="background:var(--bg);padding:8px;border-radius:8px;text-align:center">26 kg</b><b style="background:var(--bg);padding:8px;border-radius:8px;text-align:center">5</b><b style="border:1px solid var(--line);border-radius:8px;text-align:center;padding:7px 0"></b></div></div>
+      <div style="background:var(--accent);color:var(--ink-a);border-radius:13px;padding:10px 14px;display:flex;align-items:center;gap:12px;margin-top:14px"><b style="font:800 26px var(--display)">1:32</b><b style="flex:1">Descanso</b><span style="background:var(--ink-a);color:#fff;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700">Saltar</span></div></div></div></div></div>
+
+  <div class="show rev"><div class="txt"><span class="eyebrow">Rutinas</span><h2>Arma una rutina escogiendo de la biblioteca</h2><p>Cada ejercicio con su imagen. Filtra por músculo, patrón o nivel y ve solo lo compatible con las lesiones y el equipo de tu cliente.</p>
+    <ul><li>Superseries, reordenar, duplicar días y plantillas</li><li>Generador de programas con progresión semanal y descarga</li><li>Catálogo ampliado de 800+ ejercicios bajo demanda</li></ul></div>
+    <div class="stage"><div class="panel win" style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font:800 22px var(--display);text-transform:uppercase">Día A · Inferior</b><span style="color:var(--mute);font-size:12px">3 ejercicios</span></div>
+      <div class="rb"><img src="https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Goblet_Squat/0.jpg" alt=""><div><b>Sentadilla goblet</b><small>cuádriceps · fuerza</small></div><span>4 × 5</span></div>
+      <div class="rb"><img src="https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Stiff-Legged_Dumbbell_Deadlift/0.jpg" alt=""><div><b>Peso muerto rumano</b><small>isquios · fuerza</small></div><span>3 × 6</span></div>
+      <div class="rb"><img src="https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Hip_Thrust/0.jpg" alt=""><div><b>Hip thrust en banco</b><small>glúteo · fuerza</small></div><span>3 × 8</span></div>
+      <div class="add">+ Agregar ejercicio de la biblioteca</div></div></div></div>
+
+  <div class="show"><div class="txt"><span class="eyebrow">Nutrición</span><h2>Menús reales, con macros y equivalencias</h2><p>Calcula las metas según el objetivo y el perfil (béisbol, hipertrofia, salud), arma el menú por porciones y entrega un PDF listo para tu cliente.</p>
+    <ul><li>Días de entreno y descanso con ciclado de carbohidratos</li><li>Equivalencias para cambiar un alimento por otro</li><li>Lista del súper de la semana y ajuste por tendencia de peso</li></ul></div>
+    <div class="stage"><div class="panel win" style="padding:18px"><div class="donutm"><svg viewBox="0 0 42 42"><circle r="15.9155" cx="21" cy="21" fill="none" stroke="#4f46e5" stroke-width="5.5" stroke-dasharray="22 78" transform="rotate(-90 21 21)"/><circle r="15.9155" cx="21" cy="21" fill="none" stroke="#10b981" stroke-width="5.5" stroke-dasharray="52 48" stroke-dashoffset="-22" transform="rotate(-90 21 21)"/><circle r="15.9155" cx="21" cy="21" fill="none" stroke="#f59e0b" stroke-width="5.5" stroke-dasharray="26 74" stroke-dashoffset="-74" transform="rotate(-90 21 21)"/><text x="21" y="21" text-anchor="middle" fill="#fff" style="font:800 8px var(--display)">3,250</text><text x="21" y="26" text-anchor="middle" fill="#93a0b8" style="font:500 3.2px var(--font)">kcal</text></svg>
+      <div class="lg2"><span><i style="background:#4f46e5"></i>Proteína · 153 g</span><span><i style="background:#10b981"></i>Carbohidratos · 440 g</span><span><i style="background:#f59e0b"></i>Grasa · 97 g</span></div></div>
+      <div class="meal" style="margin-top:12px"><span><b>Desayuno</b><small>8:00</small></span><span>3 huevos + 3.5 tortillas + papa cocida + mango</span></div>
+      <div class="meal"><span><b>Pre-entreno</b><small>11:30</small></span><span>4 claras + avena en hojuelas</span></div>
+      <div class="meal"><span><b>Comida</b><small>14:30</small></span><span>Tilapia + pasta + arroz + aguacate + jitomate</span></div></div></div></div>
+
+  <div class="show rev"><div class="txt"><span class="eyebrow">Entreno grupal</span><h2>Un circuito para todos, en pantalla grande</h2><p>La IA adapta cada estación a nivel y lesiones de cada persona y te dice cuánto tiempo darle a cada una. Proyecta el modo sesión en una tablet o TV.</p>
+    <ul><li>Temporizador por estación con avisos de sonido</li><li>Trabajo y descanso distintos por nivel</li><li>Sustituciones automáticas por lesión</li></ul></div>
+    <div class="stage"><div class="timer"><small>Ronda 2 de 4 · Estación 3 de 6</small><div class="n">Peso muerto rumano</div><div class="t">52</div>
+      <div class="cl3"><div><b>Ana</b>Bisagra de cadera<small>TRABAJA · 8 s</small></div><div class="r"><b>Luis</b>Peso muerto a una pierna<small>DESCANSA · 15 s</small></div><div><b>María</b>Peso muerto rumano<small>TRABAJA · 3 s</small></div></div></div></div></div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="head"><span class="eyebrow">Empieza en minutos</span><h2 style="margin-top:16px">Así de simple</h2></div>
+  <div class="steps"><div class="step"><div class="n">1</div><h3>Crea tu cuenta</h3><p>Agrega a tus clientes con su objetivo, nivel y lesiones. O carga datos de ejemplo para explorar.</p></div>
+    <div class="step"><div class="n">2</div><h3>Genera su plan</h3><p>Un programa por perfil y un menú por porciones, o arma todo a mano desde la biblioteca.</p></div>
+    <div class="step"><div class="n">3</div><h3>Compártelo</h3><p>Manda el enlace del portal por WhatsApp o entrega un PDF. Tú ves su avance en tiempo real.</p></div></div>
+</div></section>
+
+<section id="precios" class="alt"><div class="wrap">
+  <div class="head"><span class="eyebrow">Precios</span><h2 style="margin-top:16px">Prueba todo, sin tarjeta</h2><p>Empieza con <span id="trial2">14</span> días gratis. Sin compromiso.</p></div>
+  <div class="prices">
+    <div class="plan pro"><span class="tagp">Recomendado</span><h3>Pro</h3><div class="price"><span id="p-mxn">$349</span><small> MXN / mes</small></div><div class="mute" style="font-size:14px">o <span id="p-usd">$19</span> USD al mes</div>
+      <ul><li>Clientes y rutinas ilimitados</li><li>Portal del cliente con registro de series</li><li>Nutrición por porciones y PDF con tu marca</li><li>Entreno grupal con IA y modo sesión</li><li>Agenda, pagos y recibos</li></ul><a class="btn pri lg" style="width:100%;justify-content:center" href="app.html?registro=1">Empezar prueba gratis</a></div>
+    <div class="plan"><h3>Todo incluido en la prueba</h3><div class="price">$0<small> por <span id="trial3">14</span> días</small></div><div class="mute" style="font-size:14px">Sin tarjeta de crédito</div>
+      <ul><li>Acceso completo a todas las funciones</li><li>Datos de ejemplo para explorar</li><li>Tus datos se conservan al suscribirte</li><li>Exporta tus clientes y pagos cuando quieras</li></ul><a class="btn lg" style="width:100%;justify-content:center" href="app.html?registro=1">Crear cuenta</a></div>
+  </div>
+</div></section>
+
+<section id="preguntas"><div class="wrap">
+  <div class="head"><h2>Preguntas frecuentes</h2></div>
+  <div class="faq">
+    <details><summary>¿Mis clientes tienen que descargar una app?</summary><p>No. Reciben un enlace y abren su plan en el navegador del celular. Si quieren, lo agregan a la pantalla de inicio y se abre como una app.</p></details>
+    <details><summary>¿Sirve para béisbol, fisicoculturismo y entrenamiento general?</summary><p>Sí. Cada cliente tiene su perfil: béisbol (con fases de temporada y cuidado del brazo), hipertrofia (con volumen por músculo y descargas) o salud general. Los programas y los menús se ajustan a ese perfil.</p></details>
+    <details><summary>¿La IA es obligatoria?</summary><p>No. Sin IA, el entreno grupal se arma con reglas del sistema. Si quieres razonamiento adicional, agregas tu propia clave de Anthropic en Ajustes.</p></details>
+    <details><summary>¿Qué pasa con los datos de mis clientes?</summary><p>Se guardan en la nube con acceso restringido por cuenta: cada entrenador solo ve a sus clientes. El enlace del portal es privado y puedes desactivarlo o cambiarlo en cualquier momento. Lee el <a href="privacidad.html" style="color:var(--accent)">aviso de privacidad</a>.</p></details>
+    <details><summary>¿Sustituye a un médico o nutriólogo clínico?</summary><p>No. C-Lab es una herramienta de orientación para entrenadores. Los planes son sugerencias que tú revisas y ajustas, y no reemplazan una valoración médica.</p></details>
+    <details><summary>¿Puedo llevarme mis datos?</summary><p>Sí. Puedes descargar un respaldo completo y exportar clientes y pagos a Excel (CSV) cuando quieras.</p></details>
+  </div>
+</div></section>
+
+<section class="final"><div class="wrap"><h2>Pon en orden tu negocio de <span class="lime">entrenamiento</span></h2><p>Crea tu cuenta y prueba C-Lab con tus clientes reales.</p><a class="btn pri lg" href="app.html?registro=1">Empezar gratis</a></div></section>
+
+<footer><div class="wrap"><a class="logo" href="./"><img src="logo-mark.svg" width="28" height="28" alt=""><b style="font-size:20px">C<i>-</i>LAB</b></a><span class="sp"></span><a href="terminos.html">Términos</a><a href="privacidad.html">Privacidad</a><a href="app.html">Entrar</a><span>© C-Lab · Coaching Lab</span></div></footer>
+<script type="module" src="landing.js?v=16"></script>
 </body>
 </html>

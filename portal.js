@@ -9,10 +9,15 @@ const IC = { hoy: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10'
 const svg = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${IC[n]}"/></svg>`;
 const PARQ = ['¿Algún médico te dijo que tienes un problema del corazón o presión alta?', '¿Sientes dolor en el pecho al hacer actividad física?', '¿Has sentido dolor en el pecho en reposo en el último mes?', '¿Pierdes el equilibrio por mareo o has perdido el conocimiento?', '¿Tienes un problema de huesos o articulaciones que empeora con el ejercicio?', '¿Tomas medicamentos para la presión o el corazón?', '¿Sabes de otra razón por la que no deberías hacer ejercicio?'];
 
-let D = null, tab = 'hoy', dietDay = 0, run = null, timer = null, clock = null;
+let D = null, tab = 'hoy', dietDay = 0, run = null, timer = null, clock = null, offline = false;
+const K = (n) => `clab-${n}-${token.slice(0, 12)}`;
+const lget = (n, d) => { try { return JSON.parse(localStorage.getItem(K(n))) ?? d; } catch { return d; } };
+const lset = (n, v) => { try { localStorage.setItem(K(n), JSON.stringify(v)); } catch { /* sin espacio */ } };
+const ldel = (n) => { try { localStorage.removeItem(K(n)); } catch { /* ok */ } };
 const toast = (m) => { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), 2300); };
 const api = async (action, kind, data) => {
-  const r = await fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, action, kind, data }) });
+  let r;
+  try { r = await fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, action, kind, data }) }); } catch { const e = new Error('Sin conexión'); e.net = true; throw e; }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || 'No se pudo conectar');
   return j;
@@ -58,7 +63,7 @@ const prs = () => {
 
 // ---------- vistas ----------
 function header() {
-  return `<div class="top"><div class="brandrow"><svg width="34" height="34" viewBox="0 0 64 64"><defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#101a33"/><stop offset="1" stop-color="#070c18"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#b)"/><path d="M43.6 20.6A17.5 17.5 0 1 0 43.6 43.4" fill="none" stroke="#c6f432" stroke-width="7" stroke-linecap="round"/><path d="M21 33.5h7l3-9.5 4.2 17.5 3.3-8H55" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><b>${esc(D.brand || 'C-Lab')}</b><small>Mi plan</small></div></div></div>`;
+  return `<div class="top"><div class="brandrow"><svg width="34" height="34" viewBox="0 0 64 64"><defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#101a33"/><stop offset="1" stop-color="#070c18"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#b)"/><path d="M43.6 20.6A17.5 17.5 0 1 0 43.6 43.4" fill="none" stroke="#c6f432" stroke-width="7" stroke-linecap="round"/><path d="M21 33.5h7l3-9.5 4.2 17.5 3.3-8H55" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><b>${esc(D.brand || 'C-Lab')}</b><small>Mi plan</small></div></div></div>${offline ? '<div class="offline">Sin conexión · estás viendo tu último plan guardado. Tus registros se enviarán solos al volver internet.</div>' : ''}`;
 }
 function viewHoy() {
   const r = D.routine, days = r?.days || [], idx = nextDayIdx(), day = days[idx];
@@ -66,7 +71,14 @@ function viewHoy() {
   const needIntake = !D.client.age || !D.client.height || !D.client.sex;
   const lastC = checkins()[0], needCheck = !lastC || (Date.now() - new Date(lastC.created_at)) / 864e5 > 6;
   const planned = days.length || 0, done = weekWorkouts();
+  const wk = (() => { const p = r?.program?.weeks, s = D.client.programStart; if (!p?.length || !s) return null; const n = Math.max(0, Math.floor((Date.now() - new Date(s + 'T12:00').getTime()) / (7 * 864e5))); return { n: n + 1, w: p[n % p.length] }; })();
+  const lastCoach = D.logs.find((l) => l.kind === 'message' && l.data.from !== 'client');
+  const saved = lget('run', null), canResume = saved && Date.now() - saved.start < 14 * 36e5 && days[saved.di];
+  const showTip = !lget('tip', false) && !matchMedia('(display-mode: standalone)').matches;
   return `${header()}<div class="hero"><h1>Hola, ${esc(first(D.client.name))}</h1><p>${esc(D.client.goal || 'Vamos por tu objetivo')}</p></div>
+  ${canResume ? `<div class="card accent"><h3>Tienes un entrenamiento sin terminar</h3><p class="mute small">${esc(days[saved.di].name)} · empezado ${new Date(saved.start).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</p><div class="row"><button class="pri grow" data-act="resume">Continuar</button><button class="grow" data-act="discard">Descartar</button></div></div>` : ''}
+  ${lastCoach ? `<div class="card accent"><div class="small mute">MENSAJE DE TU ENTRENADOR</div><p style="margin:6px 0 0">${esc(lastCoach.data.text)}</p></div>` : ''}
+  ${wk ? `<div class="card"><div class="small mute">TU SEMANA ${wk.n}</div><h3 style="margin-top:2px">${esc(wk.w.label)} · RIR ${esc(wk.w.rir)}</h3><p class="mute small" style="margin:4px 0 0">${esc(wk.w.note)}</p></div>` : ''}
   ${next ? `<div class="card accent"><div class="small mute">PRÓXIMA SESIÓN</div><h2 style="margin-top:4px">${fdate(next.date)} · ${esc(next.time)}</h2><div class="mute">${next.duration || 60} min${next.notes ? ' · ' + esc(next.notes) : ''}</div></div>` : ''}
   ${needIntake ? `<div class="card"><h3>Completa tu ficha</h3><p class="mute small">Ayuda a tu entrenador a ajustar tu plan (datos, lesiones y salud). Toma 2 minutos.</p><button class="pri block" data-act="intake">Llenar ficha</button></div>` : ''}
   ${day ? `<div class="card"><div class="row sp"><div><div class="small mute">TOCA HOY</div><h2>${esc(day.name)}</h2></div><span class="tag">${day.items.length} ejercicios</span></div>
@@ -74,6 +86,8 @@ function viewHoy() {
      <button class="pri block" data-act="start" data-d="${idx}">Empezar entrenamiento</button></div>
    <div class="card"><h3 style="margin-bottom:10px">Esta semana</h3><div class="kpis"><div class="kpi"><b>${done}</b><small>entrenos hechos</small></div><div class="kpi"><b>${planned}</b><small>en tu plan</small></div><div class="kpi"><b>${workouts().length}</b><small>en total</small></div></div></div>`
   : `<div class="card"><h3>Aún no tienes rutina</h3><p class="mute">Tu entrenador te asignará una pronto. Mientras tanto, completa tu ficha y tu check-in.</p></div>`}
+  ${showTip ? `<div class="card"><div class="row sp"><h3>Ten tu plan en el celular</h3><button class="sm ghost" data-act="hidetip">✕</button></div><p class="mute small">Abre esta página en el navegador y toca <b>Compartir → Añadir a pantalla de inicio</b> (iPhone) o <b>⋮ → Instalar app</b> (Android). Así abre como una app y funciona aunque no haya señal en el gimnasio.</p></div>` : ''}
+  <div class="card"><div class="row sp"><div><h3>¿Dudas o molestias?</h3><p class="mute small" style="margin:2px 0 0">Escríbele a tu entrenador.</p></div><button data-act="msg">Escribir</button></div></div>
   ${needCheck ? `<div class="card"><h3>Check-in semanal</h3><p class="mute small">Cuéntale a tu entrenador cómo vas: ánimo, energía, sueño y molestias.</p><button class="block" data-act="checkin">Hacer check-in</button></div>` : ''}`;
 }
 function viewRutina() {
@@ -101,7 +115,7 @@ function viewProgreso() {
   <div class="card"><div class="row sp"><h3>Peso</h3><button class="sm" data-act="checkin">+ Registrar</button></div>${spark(w.map((x) => x.w))}${w.length ? `<p class="mute small">${w[0].w} → <b style="color:var(--ink)">${w.at(-1).w} kg</b> (${(w.at(-1).w - w[0].w).toFixed(1)} kg)</p>` : ''}</div>
   <div class="card"><h3 style="margin-bottom:8px">Mis mejores levantamientos</h3>${p.length ? p.map((x) => `<div class="ex"><div class="b"><b>${esc(x.name)}</b><small>mejor serie</small></div><div class="r">${x.kg} kg × ${x.reps}</div></div>`).join('') : '<p class="mute small">Registra tus series al entrenar y aquí verás tus récords.</p>'}</div>
   <div class="card"><h3 style="margin-bottom:8px">Entrenamientos recientes</h3>${ws.slice(0, 8).map((x) => `<div class="ex"><div class="b"><b>${esc(x.data.dayName || 'Entrenamiento')}</b><small>${fdate(x.created_at.slice(0, 10))} · ${x.data.durationMin || '?'} min${x.data.rpe ? ' · esfuerzo ' + x.data.rpe + '/10' : ''}</small></div><div class="r"><span class="tag ok">${(x.data.entries || []).length} ejercicios</span></div></div>`).join('') || '<p class="mute small">Aún no has registrado entrenamientos.</p>'}</div>
-  ${D.logs.filter((l) => l.kind === 'message').slice(0, 3).map((m) => `<div class="card accent"><div class="small mute">MENSAJE DE TU ENTRENADOR</div><p style="margin:6px 0 0">${esc(m.data.text)}</p></div>`).join('')}`;
+  ${D.logs.filter((l) => l.kind === 'message').length ? `<div class="card"><h3 style="margin-bottom:8px">Mensajes</h3>${D.logs.filter((l) => l.kind === 'message').slice(0, 6).map((m) => `<div class="meal"><b><span>${m.data.from === 'client' ? 'Tú' : 'Tu entrenador'}</span><small>${fdate(m.created_at.slice(0, 10))}</small></b><div class="mute" style="color:#c3cde2">${esc(m.data.text)}</div></div>`).join('')}</div>` : ''}`;
 }
 function render() {
   const v = { hoy: viewHoy, rutina: viewRutina, comida: viewComida, progreso: viewProgreso }[tab]();
@@ -109,14 +123,17 @@ function render() {
 }
 
 // ---------- sesión de entrenamiento ----------
-function openRun(di) {
+function openRun(di, saved) {
   const d = D.routine.days[di];
   run = { day: d, start: Date.now(), entries: d.items.map((it) => {
     const last = lastSets(it.exId);
     return { it, sets: Array.from({ length: Math.max(1, +it.sets || 3) }, (_, i) => ({ kg: last?.[i]?.kg ?? last?.at(-1)?.kg ?? '', reps: last?.[i]?.reps ?? '', done: false })) };
   }) };
+  run.di = di;
+  if (saved && saved.sets?.length === run.entries.length) { run.start = saved.start; run.entries.forEach((en, i) => { en.sets = saved.sets[i]; }); }
   drawRun(); clearInterval(clock); clock = setInterval(tickClock, 1000);
 }
+const saveRun = () => { if (run) lset('run', { di: run.di, start: run.start, sets: run.entries.map((e) => e.sets) }); };
 const tickClock = () => { const el = $('#clk'); if (el && run) { const s = Math.floor((Date.now() - run.start) / 1000); el.textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; } };
 function drawRun() {
   const sh = $('#sheet'); sh.hidden = false; document.body.style.overflow = 'hidden';
@@ -125,7 +142,7 @@ function drawRun() {
     <div class="sets"><div class="shd"><span>Serie</span><span>Kg</span><span>Reps</span><span></span></div>${en.sets.map((s, si) => `<div class="srow ${s.done ? 'done' : ''}"><span class="n">${si + 1}</span><input inputmode="decimal" placeholder="kg" value="${esc(s.kg)}" data-e="${ei}" data-s="${si}" data-f="kg"><input inputmode="numeric" placeholder="${esc(String(en.it.reps).split('-')[0].replace(/\D/g, '') || 'reps')}" value="${esc(s.reps)}" data-e="${ei}" data-s="${si}" data-f="reps"><button class="ok" data-act="setdone" data-e="${ei}" data-s="${si}">${s.done ? '✓' : ''}</button></div>`).join('')}
     ${last ? `<div class="prev">Última vez: ${last.map((s) => `${s.kg || '–'}×${s.reps || '–'}`).join(' · ')}</div>` : ''}</div></div>`; }).join('')}
   <div class="fin"><div><button class="pri block" data-act="finish">Terminar entrenamiento</button></div></div><div id="restbox"></div>`;
-  tickClock();
+  tickClock(); saveRun();
 }
 function startRest(sec) {
   clearInterval(timer); let left = sec;
@@ -133,7 +150,7 @@ function startRest(sec) {
   draw();
   timer = setInterval(() => { left--; if (left <= 0) { clearInterval(timer); const b = $('#restbox'); if (b) b.innerHTML = ''; if (navigator.vibrate) navigator.vibrate([200, 100, 200]); toast('¡Listo! Siguiente serie 💪'); } else draw(); }, 1000);
 }
-function closeRun() { clearInterval(timer); clearInterval(clock); run = null; $('#sheet').hidden = true; $('#sheet').innerHTML = ''; document.body.style.overflow = ''; }
+function closeRun() { ldel('run'); clearInterval(timer); clearInterval(clock); run = null; $('#sheet').hidden = true; $('#sheet').innerHTML = ''; document.body.style.overflow = ''; }
 
 // ---------- modales ----------
 function modal(html) { const m = document.createElement('div'); m.className = 'modal'; m.id = 'modal'; m.innerHTML = `<div class="box">${html}</div>`; m.addEventListener('click', (e) => { if (e.target === m) m.remove(); }); document.body.appendChild(m); return m; }
@@ -169,8 +186,18 @@ function intakeForm() {
 const checked = (sel) => [...document.querySelectorAll(`${sel} input:checked`)].map((i) => i.value);
 const pillVal = (n) => +(document.querySelector(`[data-pills=${n}] .pill.on`)?.dataset.v || 0);
 
+const queue = (kind, data) => { const q = lget('q', []); q.push({ kind, data }); lset('q', q); };
+async function flushQueue() {
+  const q = lget('q', []); if (!q.length) return;
+  const rest = []; let sent = 0;
+  for (const it of q) { try { await api('log', it.kind, it.data); sent++; } catch (e) { if (e.net) rest.push(it); } }
+  lset('q', rest);
+  if (sent) { toast(`Se enviaron ${sent} registro(s) pendientes ✓`); await load(false); }
+}
+window.addEventListener('online', async () => { await flushQueue(); await load(false); });
 async function send(kind, data, ok) {
-  try { await api('log', kind, data); closeModal(); toast(ok); await load(false); } catch (e) { toast(e.message); }
+  try { await api('log', kind, data); closeModal(); toast(ok); await load(false); }
+  catch (e) { if (e.net) { queue(kind, data); closeModal(); toast('Sin internet: se enviará cuando tengas señal'); } else toast(e.message); }
 }
 
 // ---------- eventos ----------
@@ -184,6 +211,11 @@ document.addEventListener('click', async (e) => {
   else if (a === 'runclose') { if (confirm('¿Salir sin guardar este entrenamiento?')) closeRun(); }
   else if (a === 'exinfo') exInfo(el.dataset.id);
   else if (a === 'closemodal') closeModal();
+  else if (a === 'resume') { const sv = lget('run', null); if (sv) openRun(sv.di, sv); }
+  else if (a === 'discard') { ldel('run'); render(); }
+  else if (a === 'hidetip') { lset('tip', true); render(); }
+  else if (a === 'msg') modal(`<h2>Mensaje a tu entrenador</h2><textarea id="m-text" placeholder="Escribe tu duda, molestia o cambio de horario…"></textarea><button class="pri block" style="margin-top:14px" data-act="sendmsg">Enviar</button>`);
+  else if (a === 'sendmsg') { const t = $('#m-text').value.trim(); if (!t) return toast('Escribe un mensaje'); send('message', { text: t }, 'Mensaje enviado ✓'); }
   else if (a === 'checkin') checkinForm();
   else if (a === 'intake') intakeForm();
   else if (a === 'skiprest') { clearInterval(timer); $('#restbox').innerHTML = ''; }
@@ -202,19 +234,26 @@ document.addEventListener('click', async (e) => {
   else if (a === 'sendworkout') {
     const entries = run.entries.map((en) => ({ exId: en.it.exId, name: ex(en.it.exId)?.name || '', sets: en.sets.filter((s) => s.done || (s.kg && s.reps)).map((s) => ({ kg: s.kg, reps: s.reps })) })).filter((en) => en.sets.length);
     const data = { dayName: run.day.name, date: today(), durationMin: Math.max(1, Math.round((Date.now() - run.start) / 60000)), rpe: pillVal('rpe'), note: ($('#w-note')?.value || '').trim(), entries };
-    try { await api('log', 'workout', data); closeModal(); closeRun(); toast('Entrenamiento guardado ✓'); await load(false); tab = 'progreso'; render(); } catch (err) { toast(err.message); }
+    try { await api('log', 'workout', data); closeModal(); closeRun(); toast('Entrenamiento guardado ✓'); await load(false); tab = 'progreso'; render(); }
+    catch (err) { if (err.net) { queue('workout', data); closeModal(); closeRun(); toast('Sin internet: se guardó en tu teléfono y se enviará solo'); render(); } else toast(err.message); }
   }
   else if (a === 'sendcheckin') send('checkin', { adherence: pillVal('adherence'), energy: pillVal('energy'), sleep: $('#ci-sleep').value.trim(), weight: $('#ci-w').value.trim(), pain: $('#ci-pain').value.trim(), note: $('#ci-note').value.trim() }, 'Check-in enviado ✓');
   else if (a === 'sendintake') send('intake', { age: $('#in-age').value.trim(), sex: $('#in-sex').value, height: $('#in-h').value.trim(), weight: $('#in-w').value.trim(), goal: $('#in-goal').value.trim(), injuries: checked('#in-inj'), days: $('#in-days').value.trim(), equipment: checked('#in-eq'), foodsAvoid: checked('#in-food'), parq: checked('#in-parq'), notes: $('#in-notes').value.trim() }, 'Ficha enviada ✓');
 });
 document.addEventListener('input', (e) => {
-  const t = e.target; if (t.dataset?.f && run) run.entries[+t.dataset.e].sets[+t.dataset.s][t.dataset.f] = t.value;
+  const t = e.target; if (t.dataset?.f && run) { run.entries[+t.dataset.e].sets[+t.dataset.s][t.dataset.f] = t.value; saveRun(); }
 });
 
 async function load(first) {
   if (!token) { $('#app').innerHTML = '<div class="err"><h2>Falta el enlace</h2><p class="mute">Abre el enlace que te envió tu entrenador.</p></div>'; return; }
-  try { D = await api('get'); } catch (e) { if (first) $('#app').innerHTML = `<div class="err"><h2>No pudimos abrir tu plan</h2><p class="mute">${esc(e.message)}</p></div>`; return; }
+  try { D = await api('get'); offline = false; lset('d', D); }
+  catch (e) {
+    const cached = e.net ? lget('d', null) : null;
+    if (cached) { D = cached; offline = true; }
+    else { if (first) $('#app').innerHTML = `<div class="err"><h2>No pudimos abrir tu plan</h2><p class="mute">${esc(e.message)}</p></div>`; return; }
+  }
   document.title = `${D.brand || 'C-Lab'} · Mi plan`;
   if (!run) render();
 }
-load(true);
+load(true).then(flushQueue);
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

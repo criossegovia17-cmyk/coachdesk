@@ -1,6 +1,6 @@
 // Hojas imprimibles / PDF: plan de entrenamiento, plan nutricional y plan completo con marca C-Lab.
-import * as N from './nutrition.js?v=10';
-import { logoMark } from './brand.js?v=10';
+import * as N from './nutrition.js?v=16';
+import { logoMark } from './brand.js?v=16';
 
 const SWAPS = [
   ['Proteína · 30 g', 'p', 30, ['pollo', 'res', 'pescado', 'atun', 'huevo', 'claras', 'yogur', 'requeson', 'panela', 'tofu', 'whey']],

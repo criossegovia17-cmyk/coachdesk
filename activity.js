@@ -83,6 +83,7 @@ export function make(x) {
     if (l.kind === 'intake') return `<div class="fd"><div class="row sp"><b>🧾 Ficha inicial</b>${handled}</div><div class="mute small">${fdate(l.created_at)}</div><div class="chips"><span class="chip">${esc(d.age || '?')} años</span><span class="chip">${d.sex === 'f' ? 'Mujer' : 'Hombre'}</span><span class="chip">${esc(d.height || '?')} cm</span>${d.weight ? `<span class="chip">${esc(d.weight)} kg</span>` : ''}<span class="chip">${esc(d.days || '?')} días/sem</span></div>
       ${d.goal ? `<p><b>Objetivo:</b> ${esc(d.goal)}</p>` : ''}${(d.injuries || []).length ? `<p><b>Lesiones:</b> ${d.injuries.map((i) => `<span class="tag bad">⚠ ${esc(i)}</span>`).join('')}</p>` : ''}${(d.parq || []).length ? `<p class="al bad">${ic('alert', 14)}<span>Respondió SÍ en ${d.parq.length} pregunta(s) de salud. Revisa antes de empezar.</span></p>` : ''}${d.notes ? `<p class="fn">“${esc(d.notes)}”</p>` : ''}
       <div class="bar" style="margin:6px 0 0">${l.handled ? '' : act('Aplicar a la ficha del cliente', 'log-apply')}</div></div>`;
+    if (d.from === 'client') return `<div class="fd"><div class="row sp"><b>💬 ${esc(cname(l.client_id).split(' ')[0])} te escribió</b>${handled}</div><div class="mute small">${fdate(l.created_at)}</div><p class="fn" style="font-style:normal;color:var(--ink)">${esc(d.text)}</p><div class="bar" style="margin:6px 0 0">${btn('Responder', 'log-msg', `data-id="${l.client_id}"`, 'chat', 'sm pri')}${l.handled ? '' : act('Marcar visto', 'log-seen')}</div></div>`;
     return `<div class="fd"><div class="row sp"><b>💬 Mensaje enviado</b></div><div class="mute small">${fdate(l.created_at)}</div><p class="fn">${esc(d.text)}</p></div>`;
   }
   function activityTab(c) {
@@ -132,7 +133,7 @@ export function make(x) {
     },
     async 'log-msg'(el) {
       const c = x.cl(el.dataset.id), v = await x.form(`Mensaje para ${c.name.split(' ')[0]}`, [{ k: 'text', l: 'Mensaje (lo verá en su portal, pestaña Progreso)', t: 'textarea' }], { text: '' }); if (!v?.text.trim()) return;
-      const { data } = await sb.from('client_logs').insert({ user_id: x.user().id, client_id: c.id, kind: 'message', data: { text: v.text.trim() }, handled: true }).select().single();
+      const { data } = await sb.from('client_logs').insert({ user_id: x.user().id, client_id: c.id, kind: 'message', data: { text: v.text.trim(), from: 'coach' }, handled: true }).select().single();
       if (data) logs.unshift(data); x.render(); x.toast('Mensaje enviado al portal');
     },
     async 'photo-del'(el) { const c = x.cl(el.dataset.id), p = c.photos[+el.dataset.i]; if (!confirm('¿Borrar esta foto?')) return; await sb.storage.from('client-files').remove([p.path]); c.photos.splice(+el.dataset.i, 1); x.save(); x.render(); },
