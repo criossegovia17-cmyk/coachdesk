@@ -420,7 +420,7 @@ document.addEventListener('click', async (e) => {
   else if (a === 'share') shareCard();
   else if (a === 'swap') swapModal(+el.dataset.e);
   else if (a === 'swapto') {
-    const en = run.entries[+el.dataset.e], id = el.dataset.id; en.it = { ...en.it, exId: id }; delete en.sug; en.pr = false;
+    const en = run.entries[+el.dataset.e], id = el.dataset.id, was = en.it.exId; run.prs = run.prs.filter((p) => p.exId !== was); en.it = { ...en.it, exId: id }; delete en.sug; en.pr = false;
     const last = lastSets(id); if (last) en.sets.forEach((s, i) => { s.kg = last[i]?.kg ?? last.at(-1)?.kg ?? ''; s.reps = ''; s.done = false; }); else en.sets.forEach((s) => { s.kg = ''; s.reps = ''; s.done = false; });
     closeModal(); const y = $('#sheet').scrollTop; drawRun(); $('#sheet').scrollTop = y; toast('Ejercicio cambiado');
   }
