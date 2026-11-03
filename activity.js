@@ -14,9 +14,15 @@ export function make(x) {
     Object.keys(links).forEach((k) => delete links[k]);
     (data || []).forEach((l) => { if (!links[l.client_id]) links[l.client_id] = l.token; });
   }
+  const hlogs = (x.ui.habitLogs ||= []);
   async function loadLogs() {
-    const { data } = await sb.from('client_logs').select('*').order('created_at', { ascending: false }).limit(400);
-    logs.splice(0, logs.length, ...(data || []));
+    // hábitos y fotos viajan como kind 'checkin' con data.t; aquí se separan y se les da su tipo lógico
+    const [a, b] = await Promise.all([
+      sb.from('client_logs').select('*').or('data->>t.is.null,data->>t.neq.habits').order('created_at', { ascending: false }).limit(400),
+      sb.from('client_logs').select('*').eq('data->>t', 'habits').order('created_at', { ascending: false }).limit(500),
+    ]);
+    logs.splice(0, logs.length, ...(a.data || []).map((l) => (l.data?.t === 'photo' ? { ...l, kind: 'photo' } : l)));
+    hlogs.splice(0, hlogs.length, ...(b.data || []).map((l) => ({ ...l, kind: 'habits' })));
   }
   async function refresh(quiet) {
     const before = logs.filter((l) => !l.handled).length;
@@ -114,7 +120,9 @@ export function make(x) {
     const handled = l.handled ? '<span class="tag ok">visto</span>' : '<span class="tag warn">nuevo</span>';
     const act = (label, a) => `<button class="sm" data-act="${a}" data-id="${l.id}">${label}</button>`;
     if (l.kind === 'workout') return `<div class="fd"><div class="row sp"><b>🏋️ ${esc(d.dayName || 'Entrenamiento')}</b>${handled}</div><div class="mute small">${fdate(l.created_at)} · ${d.durationMin || '?'} min${d.rpe ? ` · esfuerzo ${d.rpe}/10` : ''}</div>${d.note ? `<p class="fn">“${esc(d.note)}”</p>` : ''}
-      <details><summary>${(d.entries || []).length} ejercicios</summary>${(d.entries || []).map((en) => `<div class="fe"><b>${esc(en.name)}</b> ${(en.sets || []).map((s) => `${esc(s.kg || '–')}×${esc(s.reps || '–')}`).join(' · ')}</div>`).join('')}</details>${l.handled ? '' : act('Marcar visto', 'log-seen')}</div>`;
+      <details><summary>${(d.entries || []).length} ejercicios</summary>${(d.entries || []).map((en) => `<div class="fe"><b>${esc(en.name)}</b>${en.swappedFrom ? ` <span class="tag warn">↻ en lugar de ${esc(en.swappedFromName || 'otro ejercicio')}</span>` : ''} ${(en.sets || []).map((s) => `${esc(s.kg || '–')}×${esc(s.reps || '–')}`).join(' · ')}</div>`).join('')}</details>${l.handled ? '' : act('Marcar visto', 'log-seen')}</div>`;
+    if (l.kind === 'photo') return `<div class="fd"><div class="row sp"><b>📸 Foto de progreso · ${esc(d.pose || '')}</b>${handled}</div><div class="mute small">${fdate(l.created_at)}</div><div class="photos" style="grid-template-columns:repeat(3,minmax(0,140px))"><figure><img data-path="${esc(d.path)}" data-pending="1" alt="" loading="lazy"></figure></div>
+      <div class="bar" style="margin:6px 0 0">${l.handled ? '' : act('Agregar a su progreso', 'photo-import')}${l.handled ? '' : act('Marcar visto', 'log-seen')}</div></div>`;
     if (l.kind === 'checkin') return `<div class="fd"><div class="row sp"><b>📋 Check-in</b>${handled}</div><div class="mute small">${fdate(l.created_at)}</div><div class="chips"><span class="chip">Adherencia <b>${d.adherence}/5</b></span><span class="chip">Energía <b>${d.energy}/5</b></span>${d.sleep ? `<span class="chip">Sueño <b>${esc(d.sleep)} h</b></span>` : ''}${d.weight ? `<span class="chip">Peso <b>${esc(d.weight)} kg</b></span>` : ''}</div>${d.pain ? `<p class="al warn">${ic('alert', 14)}<span>${esc(d.pain)}</span></p>` : ''}${d.note ? `<p class="fn">“${esc(d.note)}”</p>` : ''}
       <div class="bar" style="margin:6px 0 0">${d.weight && !l.handled ? act('Guardar peso en Progreso', 'log-weight') : ''}${l.handled ? '' : act('Marcar visto', 'log-seen')}</div></div>`;
     if (l.kind === 'intake') return `<div class="fd"><div class="row sp"><b>🧾 Ficha inicial</b>${handled}</div><div class="mute small">${fdate(l.created_at)}</div><div class="chips"><span class="chip">${esc(d.age || '?')} años</span><span class="chip">${d.sex === 'f' ? 'Mujer' : 'Hombre'}</span><span class="chip">${esc(d.height || '?')} cm</span>${d.weight ? `<span class="chip">${esc(d.weight)} kg</span>` : ''}<span class="chip">${esc(d.days || '?')} días/sem</span></div>
@@ -122,6 +130,18 @@ export function make(x) {
       <div class="bar" style="margin:6px 0 0">${l.handled ? '' : act('Aplicar a la ficha del cliente', 'log-apply')}</div></div>`;
     if (d.from === 'client') return `<div class="fd"><div class="row sp"><b>💬 ${esc(cname(l.client_id).split(' ')[0])} te escribió</b>${handled}</div><div class="mute small">${fdate(l.created_at)}</div><p class="fn" style="font-style:normal;color:var(--ink)">${esc(d.text)}</p><div class="bar" style="margin:6px 0 0">${btn('Responder', 'log-msg', `data-id="${l.client_id}"`, 'chat', 'sm pri')}${l.handled ? '' : act('Marcar visto', 'log-seen')}</div></div>`;
     return `<div class="fd"><div class="row sp"><b>💬 Mensaje enviado</b></div><div class="mute small">${fdate(l.created_at)}</div><p class="fn">${esc(d.text)}</p></div>`;
+  }
+  // Hábitos y comidas marcadas por el cliente en el portal (últimos 14 días)
+  function habitsCard(c) {
+    const ids = (c.habits || []).filter((h) => x.HABITS[h]); if (!ids.length) return '';
+    const by = {}; hlogs.filter((l) => l.client_id === c.id && l.data?.date).forEach((l) => { if (!by[l.data.date]) by[l.data.date] = l.data; });
+    const days = Array.from({ length: 14 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); });
+    const done = (h) => days.filter((d) => (by[d]?.done || []).includes(h)).length;
+    const good = days.filter((d) => (by[d]?.done || []).filter((h) => ids.includes(h)).length / ids.length >= 0.6).length;
+    const meals = days.reduce((a, d) => a + (by[d]?.meals || []).length, 0);
+    return `<section class="card"><div class="row sp"><h3>Hábitos · últimos 14 días</h3><span class="tag ${good >= 10 ? 'ok' : good >= 5 ? 'warn' : 'bad'}">${good}/14 días cumplidos</span></div>
+      ${ids.map((h) => { const n = done(h), p = Math.round(n / 14 * 100); return `<div class="att"><div class="row sp"><span>${x.HABITS[h][0]} ${esc(x.HABITS[h][1])}</span><b>${n}/14</b></div><div class="meter"><i style="width:${p}%"></i></div></div>`; }).join('')}
+      <p class="mini">Comidas del plan marcadas como hechas: <b>${meals}</b>. Un día "cumplido" = al menos 60% de los hábitos.</p></section>`;
   }
   function activityTab(c) {
     const lk = link(c), wb = weekBars(c), st = strength(c), feed = clogs(c);
@@ -134,6 +154,7 @@ export function make(x) {
       <section class="card"><h3>Fuerza (1RM estimado)</h3>${st.length ? st.map((q) => { const v = q.pts.map((p) => p.v), diff = v.at(-1) - v[0]; return `<div class="str"><div class="sn"><b>${esc(q.name)}</b><small>${v.at(-1)} kg${v.length > 1 ? ` · ${diff >= 0 ? '+' : ''}${Math.round(diff * 10) / 10} kg` : ''}</small></div>${spark(v)}</div>`; }).join('') : '<p class="mute">Cuando tu cliente registre series con peso, verás su progreso de fuerza aquí.</p>'}</section></div>
     ${(() => { const rp = readyToProgress(c), mv = muscleVolume(c); return `<div class="cols"><section class="card"><h3>Listos para subir carga</h3>${rp.length ? rp.map((q) => `<div class="li"><span><b style="min-width:0">${esc(q.name)}</b><br><span class="mute small">completó ${q.top} reps en todas las series con ${q.from} kg</span></span><span class="tag ok">→ ${q.to} kg</span></div>`).join('') : '<p class="mute">Cuando tu cliente complete todas las repeticiones objetivo con el mismo peso, te sugerimos subirlo (progresión doble).</p>'}</section>
       <section class="card"><h3>Series por músculo · últimos 7 días</h3>${Object.keys(mv).length ? `<div class="chips">${Object.entries(mv).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span class="chip ${v >= 10 && v <= 20 ? 'ok' : ''}">${esc(k)} <b>${v}</b></span>`).join('')}</div><small class="mute">Rango práctico para hipertrofia: 10–20 series por músculo por semana.</small>` : '<p class="mute">Sin series registradas esta semana.</p>'}</section></div>`; })()}
+    ${habitsCard(c)}
     <section class="card"><div class="row sp"><h3>Actividad reciente</h3>${btn('Enviar mensaje', 'log-msg', `data-id="${c.id}"`, 'chat', 'sm')}</div>${feed.slice(0, 15).map(feedItem).join('') || '<p class="mute">Aún no hay actividad. Activa el portal y comparte el enlace.</p>'}</section>`;
   }
 
@@ -170,6 +191,11 @@ export function make(x) {
       if (d.weight) c.measures.push({ date: l.created_at.slice(0, 10), weight: +d.weight, fat: '', waist: '', note: 'Ficha inicial' });
       x.save(); await sb.from('client_logs').update({ handled: true }).eq('id', l.id); l.handled = true; x.render(); x.toast('Ficha actualizada');
     },
+    async 'photo-import'(el) {
+      const l = logs.find((q) => q.id === el.dataset.id), c = x.cl(l.client_id); if (!l || !c) return;
+      (c.photos ||= []).push({ path: l.data.path, date: l.data.date || l.created_at.slice(0, 10), pose: l.data.pose || 'Otra' }); x.save();
+      await sb.from('client_logs').update({ handled: true }).eq('id', l.id); l.handled = true; x.render(); x.toast('Foto agregada a su progreso');
+    },
     async 'log-msg'(el) {
       const c = x.cl(el.dataset.id), v = await x.form(`Mensaje para ${c.name.split(' ')[0]}`, [{ k: 'text', l: 'Mensaje (lo verá en su portal, pestaña Progreso)', t: 'textarea' }], { text: '' }); if (!v?.text.trim()) return;
       const { data } = await sb.from('client_logs').insert({ user_id: x.user().id, client_id: c.id, kind: 'message', data: { text: v.text.trim(), from: 'coach' }, handled: true }).select().single();
@@ -193,5 +219,5 @@ export function make(x) {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && x.user()) refresh(true); });
   setInterval(() => { if (document.visibilityState === 'visible' && x.user()) refresh(true); }, 90000);
 
-  return { V, ACT, activityTab, photosSection, hydrate, refresh, logs, links, link, clogs, strength, weekBars, riskInfo, photos };
+  return { V, ACT, activityTab, photosSection, hydrate, refresh, logs, links, link, clogs, strength, weekBars, riskInfo, photos, hlogs };
 }

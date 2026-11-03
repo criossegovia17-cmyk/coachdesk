@@ -39,6 +39,8 @@ const GROUPS = ['pecho', 'espalda', 'hombro', 'bíceps', 'tríceps', 'cuádricep
 const TYPES = ['fuerza', 'potencia', 'isométrico', 'core', 'cardio', 'cuidado del brazo', 'movilidad'];
 const EQUIP = ['mancuernas', 'barra', 'kettlebell', 'banda', 'banco', 'polea', 'máquina', 'balón medicinal', 'caja', 'barra de dominadas', 'cuerda', 'rueda', 'trineo', 'cuerda pesada'];
 const INJURIES = ['rodilla', 'hombro', 'espalda', 'muñeca', 'codo', 'impacto'];
+const HABITS = { agua: ['💧', 'Tomar suficiente agua'], sueno: ['😴', 'Dormir 7+ horas'], pasos: ['🚶', 'Caminar 8,000 pasos'], proteina: ['🥩', 'Proteína en cada comida'], creatina: ['⚡', 'Tomar creatina'], movilidad: ['🧘', 'Movilidad 10 min'], azucar: ['🚫', 'Sin refrescos ni azúcar añadida'] };
+const BRAND_COLORS = ['#c6f432', '#2dd4bf', '#38bdf8', '#818cf8', '#f472b6', '#fb923c', '#f87171', '#facc15'];
 const PARQ = ['¿Algún médico te dijo que tienes un problema del corazón o presión alta?', '¿Sientes dolor en el pecho al hacer actividad física?', '¿Has sentido dolor en el pecho en reposo en el último mes?', '¿Pierdes el equilibrio por mareo o has perdido el conocimiento?', '¿Tienes un problema de huesos o articulaciones que empeora con el ejercicio?', '¿Tomas medicamentos para la presión o el corazón?', '¿Sabes de otra razón por la que no deberías hacer ejercicio?'];
 
 let S, tab = {}, tmr, ui = {
@@ -236,6 +238,7 @@ const clientFields = () => [
   { k: 'phase', l: 'Solo fisicoculturismo · fase', t: 'select', o: [['volumen', 'Volumen'], ['definición', 'Definición'], ['mantenimiento', 'Mantenimiento']] },
   { h: 'Datos para nutrición' }, { k: 'sex', l: 'Sexo', t: 'select', o: [['m', 'Hombre'], ['f', 'Mujer']] }, { k: 'age', l: 'Edad', t: 'number' }, { k: 'height', l: 'Estatura (cm)', t: 'number' },
   { k: 'activity', l: 'Nivel de actividad diaria', t: 'select', o: ACTIVITY }, { k: 'foodsAvoid', l: 'Evitar (alergias / preferencias)', t: 'checks', o: RESTRICTIONS },
+  { h: 'Portal del cliente' }, { k: 'habits', l: 'Hábitos diarios que verá en su portal (elige de 3 a 5)', t: 'checks', o: Object.entries(HABITS).map(([k, v]) => [k, `${v[0]} ${v[1]}`]) },
   { h: 'Plan y asignaciones' }, { k: 'planId', l: 'Plan de pago', t: 'select', o: [['', 'Sin plan'], ...S.plans.map((p) => [p.id, `${p.name} · ${money(p.price)}`])] },
   { k: 'routineId', l: 'Programa asignado', t: 'select', o: [['', 'Ninguno'], ...S.routines.map((r) => [r.id, r.name])] },
   { k: 'dietId', l: 'Dieta asignada', t: 'select', o: [['', 'Ninguna'], ...S.diets.map((r) => [r.id, r.name])] },
@@ -426,7 +429,9 @@ function renderPlan(r) {
 }
 
 V.ajustes = () => page('Ajustes', 'Tu marca, IA, cuenta y respaldos', '',
-  `${planCard()}<div class="cols"><section class="card"><h3>Tu marca</h3><label class="fl">Tu nombre o el de tu negocio (aparece en los PDF y en el saludo)</label><input id="brand" value="${esc(S.settings?.brand || '')}" placeholder="Ej. CR Athletic Lab"><label class="fl">Moneda</label><div class="seg">${[['MXN', 'Pesos (MXN)'], ['USD', 'Dólares (USD)']].map(([k, l]) => `<button class="${(S.settings?.currency || 'MXN') === k ? 'on' : ''}" data-act="currency-set" data-v="${k}">${l}</button>`).join('')}</div><div class="bar">${btn('Guardar', 'brand-save', '', 'check', 'pri')}</div></section>
+  `${planCard()}<div class="cols"><section class="card"><h3>Tu marca</h3><label class="fl">Tu nombre o el de tu negocio (aparece en los PDF y en el saludo)</label><input id="brand" value="${esc(S.settings?.brand || '')}" placeholder="Ej. CR Athletic Lab"><label class="fl">Color de tu marca en el portal del cliente</label><div class="swatches">${BRAND_COLORS.map((c) => `<button class="sw ${S.settings?.brandColor === c ? 'on' : ''}" style="background:${c}" data-act="brand-color" data-v="${c}" title="${c}"></button>`).join('')}<button class="sm" data-act="brand-color" data-v="">Por defecto</button></div>
+  <label class="fl">Tu logo (aparece en el portal y en los PDF)</label><div class="row">${S.settings?.logo ? `<img class="logoprev" src="${S.settings.logo}" alt="">` : '<span class="logoprev ph">C</span>'}<label class="btn sm">${ic('plus', 14)}Subir logo<input type="file" id="logo-up" accept="image/*" hidden></label>${S.settings?.logo ? btn('Quitar', 'logo-clear', '', '', 'sm del') : ''}</div>
+  <label class="fl">Moneda</label><div class="seg">${[['MXN', 'Pesos (MXN)'], ['USD', 'Dólares (USD)']].map(([k, l]) => `<button class="${(S.settings?.currency || 'MXN') === k ? 'on' : ''}" data-act="currency-set" data-v="${k}">${l}</button>`).join('')}</div><div class="bar">${btn('Guardar', 'brand-save', '', 'check', 'pri')}</div></section>
   <section class="card"><h3>Cuenta</h3><p>${esc(USER.email)}</p><div class="bar">${btn('Cerrar sesión', 'logout', '', 'out')}</div></section></div>
   <section class="card"><h3>IA (Claude)</h3><p class="mute">Con tu API key de Anthropic, "Entrenar en grupo" usa IA para razonar sobre cada cliente. Sin key funciona igual con el sistema de reglas. La key se guarda solo en tu cuenta.</p>
   <p>Estado: ${S.settings?.apiKey ? '<span class="tag ok">API key configurada</span>' : '<span class="tag warn">Sin API key (usa reglas)</span>'}</p><div class="row"><input id="key" type="password" placeholder="sk-ant-…" autocomplete="off"><button class="pri" data-act="key-save">Guardar</button></div></section>
@@ -461,7 +466,7 @@ function readPlanForm() {
   p.equipment = [...document.querySelectorAll('#pl-equip input:checked')].map((i) => i.value);
   p.minutes = Math.max(20, Math.min(120, +$('#pl-min').value || 45)); p.focus = $('#pl-focus').value; p.useAI = $('#pl-ai').value === '1';
 }
-function normalizeClient(v) { return { ...v, active: v.active === '1' || v.active === true, activity: Number(v.activity) || 1.55 }; }
+function normalizeClient(v) { return { ...v, active: v.active === '1' || v.active === true, activity: Number(v.activity) || 1.55, habits: (v.habits || []).slice(0, 5) }; }
 
 const ACT = {
   close: closeModal,
@@ -605,6 +610,8 @@ const ACT = {
     if (!CLAB.checkoutUrl) return toast('Los pagos se activarán pronto. Tu cuenta sigue funcionando sin cargo.');
     const u = new URL(CLAB.checkoutUrl); u.searchParams.set('client_reference_id', USER.id); u.searchParams.set('prefilled_email', USER.email); window.open(u.href, '_blank');
   },
+  'brand-color'(el) { (S.settings ||= {}).brandColor = el.dataset.v; save(); render(); toast(el.dataset.v ? 'Color guardado' : 'Color por defecto'); },
+  'logo-clear'() { (S.settings ||= {}).logo = ''; save(); render(); },
   'currency-set'(el) { (S.settings ||= {}).currency = el.dataset.v; save(); render(); },
   'csv-payments'() { download(`pagos-${today()}.csv`, csv([['Cliente', 'Concepto', 'Monto', 'Vence', 'Estado', 'Fecha de pago', 'Método'], ...S.payments.map((p) => [cl(p.clientId)?.name || '', p.concept, p.amount, p.due, p.status, p.paidOn || '', p.method || ''])])); },
   'csv-clients'() { download(`clientes-${today()}.csv`, csv([['Nombre', 'Teléfono', 'Correo', 'Objetivo', 'Tipo', 'Nivel', 'Plan', 'Activo', 'Sesiones restantes'], ...S.clients.map((c) => [c.name, c.phone, c.email, c.goal, TRACK_NAME[c.track || 'general'], c.level, S.plans.find((p) => p.id === c.planId)?.name || '', c.active ? 'Sí' : 'No', c.credits ?? ''])])); },
@@ -650,6 +657,12 @@ document.addEventListener('change', async (e) => {
       c.files.push({ name: f.name, path, date: today() });
     }
     save(); render(); toast('Archivo(s) subido(s)');
+  } else if (t.id === 'logo-up' && t.files[0]) {
+    try {
+      const bmp = await createImageBitmap(t.files[0]), k = Math.min(bmp.width, bmp.height), c = document.createElement('canvas'); c.width = c.height = 160;
+      c.getContext('2d').drawImage(bmp, (bmp.width - k) / 2, (bmp.height - k) / 2, k, k, 0, 0, 160, 160);
+      (S.settings ||= {}).logo = c.toDataURL('image/png'); save(); render(); toast('Logo guardado');
+    } catch { toast('No se pudo leer la imagen'); }
   } else if (t.id === 'imp') {
     try { const d = JSON.parse(await t.files[0].text()); if (!d.clients || !d.exercises) throw 0; if (!confirm('Se reemplazarán tus datos actuales.')) return; S = d; migrate(); save(); render(); toast('Respaldo restaurado'); } catch { toast('Archivo de respaldo inválido'); }
   }
@@ -696,7 +709,7 @@ function riskCard() {
 }
 function activityCard() {
   const L = mods.activity.logs.filter((l) => l.kind !== 'message' || l.data.from === 'client').slice(0, 6), nu = mods.activity.logs.filter((l) => !l.handled).length;
-  const txt = (l) => ({ workout: `completó ${esc(l.data.dayName || 'un entrenamiento')}`, checkin: `envió su check-in (adh ${l.data.adherence}/5)`, intake: 'llenó su ficha inicial', message: `te escribió: “${esc(String(l.data.text || '').slice(0, 50))}”` }[l.kind]);
+  const txt = (l) => ({ workout: `completó ${esc(l.data.dayName || 'un entrenamiento')}`, photo: 'subió una foto de progreso', checkin: `envió su check-in (adh ${l.data.adherence}/5)`, intake: 'llenó su ficha inicial', message: `te escribió: “${esc(String(l.data.text || '').slice(0, 50))}”` }[l.kind]);
   return `<section class="card"><div class="row sp"><h3>Actividad de tus clientes ${nu ? `<span class="badge">${nu}</span>` : ''}</h3><span class="mute small">Desde el portal</span></div>${L.length ? L.map((l) => `<a class="li act" href="#/cliente/${l.client_id}" data-act="open-act" data-id="${l.client_id}"><b>${fdate(l.created_at.slice(0, 10))}</b><span><b style="min-width:0">${esc(cl(l.client_id)?.name || 'Cliente')}</b> ${txt(l)}</span>${l.handled ? '' : '<span class="tag warn">nuevo</span>'}</a>`).join('') : '<p class="mute empty">Cuando tus clientes usen el portal verás aquí sus entrenamientos y check-ins. Activa el portal desde la pestaña Actividad de cada cliente.</p>'}</section>`;
 }
 const csv = (rows) => rows.map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -752,7 +765,7 @@ function offerUndo(label) {
 ACT.undo = () => { if (!UNDO) return; S = JSON.parse(UNDO); UNDO = null; migrate(); save(); render(); toast('Restaurado ✓'); };
 
 // ---------- Módulos ----------
-const ctx = { sb, user: () => USER, onDone, ui, esc, ic, btn, page, thumb, avatar, form, dialog, closeModal, save, render, renderMain, toast, today, fdate, money, uid, cl, ex, find, del, plain, opts, copy, $, PATTERNS, GROUPS, TYPES, LEVELS, EQUIP, TRACK_NAME, apptFields, addAppt, apptWho, apptIds, apptSort };
+const ctx = { HABITS, sb, user: () => USER, onDone, ui, esc, ic, btn, page, thumb, avatar, form, dialog, closeModal, save, render, renderMain, toast, today, fdate, money, uid, cl, ex, find, del, plain, opts, copy, $, PATTERNS, GROUPS, TYPES, LEVELS, EQUIP, TRACK_NAME, apptFields, addAppt, apptWho, apptIds, apptSort };
 Object.defineProperty(ctx, 'S', { get: () => S });
 Object.defineProperty(ctx, 'mods', { get: () => mods });
 const mods = { calendar: calendarMod.make(ctx), builder: builderMod.make(ctx), diet: dietMod.make(ctx), sheets: sheetsMod.make(ctx), activity: activityMod.make(ctx), live: liveMod.make(ctx), tools: toolsMod.make(ctx), catalog: catalogMod.make(ctx) };

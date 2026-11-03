@@ -13,7 +13,7 @@ export function make(x) {
   const brand = () => esc(x.S.settings?.brand || 'C-Lab');
   const M = (t) => `P ${Math.round(t.p)} · C ${Math.round(t.c)} · G ${Math.round(t.f)}`;
 
-  const header = (title, sub) => `<header class="sh-h"><div class="sh-b">${logoMark(46)}<div><b>${brand()}</b><small>Coaching Lab</small></div></div><div class="sh-t"><h1>${title}</h1><p>${sub}</p></div></header>`;
+  const header = (title, sub) => `<header class="sh-h"><div class="sh-b">${x.S.settings?.logo ? `<img src="${x.S.settings.logo}" alt="" style="width:46px;height:46px;border-radius:12px;object-fit:cover">` : logoMark(46)}<div><b>${brand()}</b><small>Coaching Lab</small></div></div><div class="sh-t"><h1>${title}</h1><p>${sub}</p></div></header>`;
   const clientCard = (c) => c ? `<section class="sh-c"><div><small>Cliente</small><b>${esc(c.name)}</b></div><div><small>Objetivo</small><b>${esc(c.goal || '—')}</b></div><div><small>Perfil</small><b>${x.TRACK_NAME[c.track || 'general']} · ${c.level}</b></div><div><small>Cuidar</small><b>${esc((c.injuries || []).join(', ') || 'Sin restricciones')}</b></div></section>` : '';
   const foot = () => `<footer class="sh-f"><span>${brand()} · generado con C-Lab</span><span>Orientación de entrenamiento y alimentación. No sustituye valoración médica.</span></footer>`;
 
