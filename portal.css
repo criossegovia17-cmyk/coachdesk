@@ -63,3 +63,5 @@ footer.legal{text-align:center;color:var(--mute);font-size:12px;padding:20px}
 .cele{text-align:center}.cele .big{font-size:54px;line-height:1}.cele h2{margin:8px 0 2px}.prbox{margin-top:12px;background:color-mix(in srgb,var(--accent) 12%,var(--bg));border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:14px;padding:12px;text-align:left}.prbox b:first-child{display:block;margin-bottom:4px;color:var(--accent)}.ghost{background:none}
 .confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:90}.confetti i{position:absolute;top:-16px;width:9px;height:14px;border-radius:2px;animation:fall linear forwards}@keyframes fall{to{transform:translateY(105vh) rotate(720deg);opacity:.9}}
 .wex.done{border-color:color-mix(in srgb,var(--accent) 60%,var(--line))}
+
+.att.me span,.att.me b{color:var(--pri)}.att.me .meter i{box-shadow:0 0 10px var(--pri)}

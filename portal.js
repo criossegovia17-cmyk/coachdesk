@@ -177,6 +177,7 @@ function viewHoy() {
   return `${header()}<div class="hero"><h1>${hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches'}, ${esc(first(D.client.name))}</h1><p>${esc(D.client.goal || 'Vamos por tu objetivo')}</p></div>
   ${planned ? `<div class="card rings"><div class="row sp" style="margin-bottom:6px"><h3>Tu semana</h3>${st.streak ? `<span class="tag ok">🔥 Racha ${st.streak} sem</span>` : '<span class="tag">Empieza tu racha</span>'}</div>
     <div class="ringrow">${ring(done, planned, 'Entrenos')}${ids.length ? ring(ids.filter((h) => hst.done.includes(h)).length, ids.length, 'Hábitos hoy') : ''}${meals.length ? ring(mDone, meals.length, 'Comidas hoy') : ''}</div></div>` : ''}
+  ${challengeCard()}
   ${canResume ? `<div class="card accent"><h3>Tienes un entrenamiento sin terminar</h3><p class="mute small">${esc(days[saved.di].name)} · empezado ${new Date(saved.start).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</p><div class="row"><button class="pri grow" data-act="resume">Continuar</button><button class="grow" data-act="discard">Descartar</button></div></div>` : ''}
   ${lastCoach ? `<div class="card accent"><div class="small mute">MENSAJE DE TU ENTRENADOR</div><p style="margin:6px 0 0">${esc(lastCoach.data.text)}</p></div>` : ''}
   ${wk ? `<div class="card"><div class="small mute">TU SEMANA ${wk.n} DEL PROGRAMA</div><h3 style="margin-top:2px">${esc(wk.w.label)} · RIR ${esc(wk.w.rir)}</h3><p class="mute small" style="margin:4px 0 0">${esc(wk.w.note)}</p></div>` : ''}
@@ -238,7 +239,18 @@ function openRun(di, saved) {
   drawRun(); clearInterval(clock); clock = setInterval(tickClock, 1000);
 }
 const saveRun = () => { if (run) lset('run', { di: run.di, start: run.start, sets: run.entries.map((e) => e.sets), swaps: run.entries.map((e) => (e.it.exId !== e.orig ? e.it.exId : null)) }); };
-const tickClock = () => { const el = $('#clk'); if (el && run) { const s = Math.floor((Date.now() - run.start) / 1000); el.textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; } };
+// Reto del grupo: tablero con nombres de pila; el cliente se ve resaltado
+function challengeCard() {
+  const c = D.challenge; if (!c) return '';
+  const unit = { workouts: 'entrenos', volume: 'kg', habits: 'hábitos' }[c.metric] || '', medals = ['🥇', '🥈', '🥉'];
+  const myPos = c.board.findIndex((b) => b.me) + 1, top = Math.max(1, c.board[0]?.score || 0);
+  const left = Math.ceil((new Date(c.end + 'T23:59') - Date.now()) / 864e5);
+  const fmt = (n) => (c.metric === 'volume' && n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : n);
+  return `<div class="card accent"><div class="row sp"><div><div class="small mute">RETO · ${esc(c.group)}</div><h3 style="margin-top:2px">🏆 ${esc(c.name)}</h3></div><span class="tag ${c.ended ? '' : 'ok'}">${c.ended ? 'Terminó' : left <= 1 ? 'Último día' : left + ' días'}</span></div>
+    <p class="mute small" style="margin:2px 0 8px">${c.ended ? `Quedaste en el lugar ${myPos} de ${c.board.length}.` : `Vas en el lugar ${myPos} de ${c.board.length}.`}</p>
+    ${c.board.map((b, i) => `<div class="att${b.me ? ' me' : ''}"><div class="row sp"><span>${medals[i] || i + 1 + '.'} ${esc(b.name)}${b.me ? ' (tú)' : ''}</span><b>${fmt(b.score)} ${unit}</b></div><div class="meter"><i style="width:${Math.round(b.score / top * 100)}%"></i></div></div>`).join('')}</div>`;
+}
+const tickClock =() => { const el = $('#clk'); if (el && run) { const s = Math.floor((Date.now() - run.start) / 1000); el.textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; } };
 function drawRun() {
   const sh = $('#sheet'); sh.hidden = false; document.body.style.overflow = 'hidden';
   sh.innerHTML = `<div class="shead"><button class="sm ghost" data-act="runclose">✕</button><h2>${esc(run.day.name)}</h2><span class="clock" id="clk">00:00</span></div>

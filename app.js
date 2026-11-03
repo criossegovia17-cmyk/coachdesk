@@ -41,6 +41,7 @@ const EQUIP = ['mancuernas', 'barra', 'kettlebell', 'banda', 'banco', 'polea', '
 const INJURIES = ['rodilla', 'hombro', 'espalda', 'muñeca', 'codo', 'impacto'];
 const HABITS = { agua: ['💧', 'Tomar suficiente agua'], sueno: ['😴', 'Dormir 7+ horas'], pasos: ['🚶', 'Caminar 8,000 pasos'], proteina: ['🥩', 'Proteína en cada comida'], creatina: ['⚡', 'Tomar creatina'], movilidad: ['🧘', 'Movilidad 10 min'], azucar: ['🚫', 'Sin refrescos ni azúcar añadida'] };
 const BRAND_COLORS = ['#c6f432', '#2dd4bf', '#38bdf8', '#818cf8', '#f472b6', '#fb923c', '#f87171', '#facc15'];
+const CHALLENGE_METRICS = { workouts: 'Entrenos registrados', volume: 'Volumen levantado (kg)', habits: 'Hábitos cumplidos' };
 const PARQ = ['¿Algún médico te dijo que tienes un problema del corazón o presión alta?', '¿Sientes dolor en el pecho al hacer actividad física?', '¿Has sentido dolor en el pecho en reposo en el último mes?', '¿Pierdes el equilibrio por mareo o has perdido el conocimiento?', '¿Tienes un problema de huesos o articulaciones que empeora con el ejercicio?', '¿Tomas medicamentos para la presión o el corazón?', '¿Sabes de otra razón por la que no deberías hacer ejercicio?'];
 
 let S, tab = {}, tmr, ui = {
@@ -349,7 +350,8 @@ function programTab(c, r) {
 V.grupos = () => page('Grupos', 'Arma grupos para clases y sesiones compartidas', btn('Nuevo grupo', 'group-new', '', 'plus', 'pri'),
   `<div class="grid">${S.groups.map((g) => `<div class="card"><h3>${esc(g.name)}</h3><p class="mute">${esc(g.notes)}</p>
     <div class="tags">${g.clientIds.map((i) => `<span class="tag">${esc(cl(i)?.name || '?')}</span>`).join('')}</div>
-    <div class="bar">${btn('Entrenar', 'plan-group', `data-id="${g.id}"`, 'zap', 'pri sm')}${btn('Editar', 'group-edit', `data-id="${g.id}"`, 'edit', 'sm')}${btn('', 'group-del', `data-id="${g.id}"`, 'trash', 'sm del')}</div></div>`).join('') || '<p class="mute">Aún no hay grupos.</p>'}</div>`);
+    ${g.challenge ? `<p class="mini">🏆 Reto: <b>${esc(g.challenge.name)}</b> · ${esc(CHALLENGE_METRICS[g.challenge.metric] || '')} · ${esc(g.challenge.start)} → ${esc(g.challenge.end)}</p>` : ''}
+    <div class="bar">${btn('Entrenar', 'plan-group', `data-id="${g.id}"`, 'zap', 'pri sm')}${btn(g.challenge ? 'Editar reto' : 'Crear reto', 'group-challenge', `data-id="${g.id}"`, 'zap', 'sm')}${g.challenge ? btn('Quitar reto', 'challenge-clear', `data-id="${g.id}"`, '', 'sm') : ''}${btn('Editar', 'group-edit', `data-id="${g.id}"`, 'edit', 'sm')}${btn('', 'group-del', `data-id="${g.id}"`, 'trash', 'sm del')}</div></div>`).join('') || '<p class="mute">Aún no hay grupos.</p>'}</div>`);
 
 const apptFields = () => [
   { k: 'date', l: 'Fecha', t: 'date', req: 1 }, { k: 'time', l: 'Hora', t: 'time', req: 1 }, { k: 'duration', l: 'Duración (min)', t: 'number' },
@@ -517,6 +519,15 @@ const ACT = {
   'prog-drop'() { ui.draft = null; render(); },
   async 'group-new'() { const v = await groupForm({ clientIds: [] }); if (v) { S.groups.push({ id: uid('g'), ...v }); save(); render(); } },
   async 'group-edit'(el) { const g = find('groups', el.dataset.id); const v = await groupForm(g); if (v) { Object.assign(g, v); save(); render(); } },
+  async 'group-challenge'(el) {
+    const g = find('groups', el.dataset.id), t = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4), iso = (d) => d.toISOString().slice(0, 10);
+    const base = g.challenge || { name: '', metric: 'workouts', start: iso(t), end: iso(new Date(t.getTime() + 28 * 864e5)) };
+    const v = await form('Reto del grupo ' + esc(g.name), [{ k: 'name', l: 'Nombre del reto', req: 1, ph: 'Ej. 12 entrenos en 4 semanas' }, { k: 'metric', l: 'Qué se cuenta', t: 'select', o: Object.entries(CHALLENGE_METRICS) }, { k: 'start', l: 'Inicio', t: 'date', req: 1 }, { k: 'end', l: 'Fin', t: 'date', req: 1 }], base);
+    if (!v) return;
+    if (v.end < v.start) return toast('El fin debe ser después del inicio');
+    g.challenge = v; save(); render(); toast('Reto guardado: tus clientes ven el tablero en su portal');
+  },
+  'challenge-clear'(el) { const g = find('groups', el.dataset.id); delete g.challenge; save(); render(); },
   'group-del'(el) { if (confirm('¿Eliminar grupo?')) { del('groups', el.dataset.id); save(); render(); } },
   'plan-group'(el) { const g = find('groups', el.dataset.id); ui.plan.clientIds = g.clientIds.filter((i) => cl(i)?.active); ui.result = null; if (location.hash !== '#/entrenar') location.hash = '#/entrenar'; else render(); },
 
