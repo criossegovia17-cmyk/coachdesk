@@ -4,7 +4,7 @@ export const CLAB = {
   trialDays: 14,                       // días de prueba gratis para cuentas nuevas
   price: { MXN: '$349', USD: '$19' },  // precio mensual del plan Pro (solo se muestra; el cobro depende del enlace de pago)
   checkoutUrl: '',                     // enlace de pago (Stripe Payment Link o similar). Vacío = pagos aún no activos
-  contact: { whatsapp: '', email: '' },  // datos de contacto públicos de la página (WhatsApp con lada, ej. 5216641234567). Vacío = el formulario no se muestra
+  contact: { whatsapp: '526644374064', email: 'criossegovia17@gmail.com' },  // datos de contacto públicos de la página (WhatsApp con lada, ej. 5216641234567). Vacío = el formulario no se muestra
   enforce: false,                      // true = al terminar la prueba sin suscripción, la cuenta queda en solo lectura
   features: ['Clientes y rutinas ilimitados', 'Portal del cliente con registro de series', 'Nutrición por porciones y PDF', 'Entreno grupal con IA y modo sesión'],
 };
