@@ -2,7 +2,7 @@
 // Formato por línea: id|nombre|patrón|grupo|nivel(p/i/a)|equipo|evitar|tipo|perfiles(g/b/h)|imagen|cómo se hace|puntos clave|más fácil|más difícil
 // tipo: F fuerza · P potencia · I isométrico · C core · A cardio · B cuidado del brazo · M movilidad
 // perfiles: g general · b béisbol · h hipertrofia / fisicoculturismo
-export const LIB_VERSION = 2;
+export const LIB_VERSION = 3;
 const IMG = 'img/ex/'; // copias locales de free-exercise-db (dominio público)
 const TYPE = { F: 'fuerza', P: 'potencia', I: 'isométrico', C: 'core', A: 'cardio', B: 'cuidado del brazo', M: 'movilidad' };
 const LVL = { p: 'principiante', i: 'intermedio', a: 'avanzado' };
@@ -128,6 +128,34 @@ ar7|Deslizamiento en pared|cuidado del brazo|hombro|p|peso corporal||B|gb|-|Espa
 ar8|Libro abierto (movilidad torácica)|movilidad|espalda|p|peso corporal||M|gb|-|De lado con rodillas dobladas, abre el brazo superior hacia atrás rotando el tronco.|Cadera quieta · Mirada a la mano|Rango corto|Con pausa de 3 s
 ar9|Movilidad de cadera 90/90|movilidad|glúteo|p|peso corporal|rodilla|M|gb|-|Sentado con ambas rodillas a 90°, gira de un lado al otro moviendo cadera.|Torso erguido · Sin dolor|Con apoyo de manos|Sin manos
 ar10|Estiramiento de cápsula posterior|movilidad|hombro|p|peso corporal|hombro|M|b|-|Acostado de lado con el brazo al frente a 90°, empuja suave el antebrazo hacia el piso.|Suave · Sin dolor|Rango corto|Más tiempo
+is7|Plancha frontal isométrica|isométrico|abdomen|p|peso corporal||I|gbh|-|Apoyado en antebrazos y puntas, cuerpo en línea recta. Mantén el tiempo indicado sin que la cadera caiga ni suba.|Glúteos y abdomen apretados · Respira · Mirada al piso|Plancha en rodillas|Plancha con pies elevados
+is8|Plancha lateral|isométrico|abdomen|i|peso corporal|hombro|I|gb|-|De lado, apoyado en un antebrazo con la cadera arriba y el cuerpo alineado. Mantén y cambia de lado.|Cadera alta · Hombro sobre el codo · Cuerpo recto|Con rodilla apoyada|Con elevación de pierna
+is9|Sostén de sentadilla profunda|isométrico|cuádriceps|p|peso corporal|rodilla|I|gb|-|Baja a la sentadilla más profunda que controles sin dolor y mantén la posición con el pecho arriba.|Talones en el piso · Rodillas hacia afuera · Respira lento|Con apoyo de manos|Sostén con mancuerna al pecho
+is10|Sostén de flexión abajo|isométrico|pecho|i|peso corporal|hombro,muñeca|I|gb|-|Baja a media flexión con el pecho a unos 5 cm del piso y mantén 10-20 s con el cuerpo firme.|Codos a 45° · Cuerpo en línea|A media altura inclinado|Con pausa en tres alturas
+is11|Sostén de dominada arriba|isométrico|espalda|a|barra de dominadas|hombro|I|bh|-|Sube con la barbilla sobre la barra y mantén la posición, hombros lejos de las orejas.|Escápulas abajo · Pecho a la barra|Sostén con banda de ayuda|Sostén con lastre
+is12|Sostén de dominada a media altura|isométrico|espalda|i|barra de dominadas|hombro|I|bh|-|Sube hasta que los codos formen 90° y mantén, sin balancearte.|Codos a 90° · Abdomen firme|Desde un banco|A 120° con lastre
+is13|Sostén hueco (hollow hold)|isométrico|abdomen|i|peso corporal|espalda|I|gb|-|Boca arriba, espalda baja pegada al piso, brazos y piernas extendidos sin tocar el suelo. Mantén.|Espalda baja pegada · Costillas abajo|Rodillas dobladas|Brazos sobre la cabeza
+is14|Sostén de estocada baja|isométrico|cuádriceps|i|peso corporal|rodilla|I|gb|-|En estocada con la rodilla trasera a un dedo del piso, mantén el equilibrio y el torso erguido.|Torso vertical · Peso en el pie delantero|Estocada a media altura|Con mancuernas
+is15|Sostén de press en pared con barra fija|isométrico|hombro|a|barra|hombro|I|bh|-|Empuja una barra fija en el rack por encima de la cabeza durante 5-8 s con máximo esfuerzo.|Costillas abajo · Empuja progresivo · Sin arquear|Con esfuerzo al 70%|Series de 8 s al 100%
+is16|Sostén del puente de glúteo con banda|isométrico|glúteo|p|banda||I|gbh|-|Puente de glúteo con una banda sobre las rodillas, mantén arriba abriendo las rodillas contra la banda.|Rodillas hacia afuera · Cadera alta|Sin banda|A una pierna
+is17|Sostén de remo invertido|isométrico|espalda|i|barra|hombro|I|bh|-|Colgado bajo una barra baja, sube el pecho a la barra y mantén 10 s con el cuerpo recto.|Cuerpo en tabla · Pecho a la barra|Con pies más cerca|Con pies elevados
+mv1|Gato-vaca|movilidad|espalda|p|peso corporal||M|g|-|En cuatro apoyos, alterna redondear y arquear la columna moviéndola vértebra por vértebra.|Lento · Respira con el movimiento|Rango corto|Con pausa de 2 s
+mv2|Estiramiento del flexor de cadera|movilidad|cuádriceps|p|peso corporal|rodilla|M|gb|-|En media rodilla, empuja la cadera hacia adelante apretando el glúteo de la pierna trasera.|Glúteo apretado · Costillas abajo|Con cojín en la rodilla|Con brazo arriba y lateral
+mv3|Postura del niño con rotación|movilidad|espalda|p|peso corporal||M|g|-|Sentado sobre los talones, lleva un brazo bajo el pecho y rota abriendo el otro hacia el techo.|Cadera atrás · Rota desde el pecho|Sin rotación|Con pausa de 5 s
+mv4|Sentadilla profunda con apoyo|movilidad|cuádriceps|p|peso corporal|rodilla|M|gb|-|Sostenido de un poste o marco, baja a una sentadilla profunda y empuja las rodillas hacia afuera con los codos.|Talones en el piso · Pecho arriba|Con talones elevados|Sin apoyo
+mv5|Movilidad de tobillo en pared|movilidad|pantorrilla|p|peso corporal||M|gb|-|Pie a unos 10 cm de la pared, lleva la rodilla a tocarla sin levantar el talón.|Talón pegado · Rodilla sobre el segundo dedo|Pie más cerca|Pie más lejos
+mv6|Paseo del oso a gusano|movilidad|cuerpo completo|i|peso corporal|muñeca|M|g|-|De pie, baja las manos al piso, camina hacia una plancha y regresa caminando hacia los pies.|Piernas casi rectas · Abdomen firme|Con rodillas flexionadas|Con flexión de brazos
+mv7|Rotación torácica en cuadrupedia|movilidad|espalda|p|peso corporal||M|gb|-|En cuatro apoyos con una mano en la nuca, abre el codo hacia el techo y regresa.|Cadera quieta · Mirada al codo|Rango corto|Con banda
+mv8|Estiramiento de isquios con banda|movilidad|isquios|p|banda||M|g|-|Boca arriba con la banda en el pie, sube la pierna estirada hasta sentir el estiramiento y mantén.|Pierna contraria pegada al piso · Respira|Rodilla flexionada|Con contracción de 5 s
+mv9|Apertura de pecho en puerta|movilidad|pecho|p|peso corporal|hombro|M|g|-|Antebrazo apoyado en un marco, da un paso al frente hasta sentir el estiramiento del pecho.|Hombros abajo · Sin dolor|Codo más bajo|Con brazo a 90°
+sp1|Lanzamiento rotacional de balón medicinal|rotacional|abdomen|i|balón medicinal||P|gb|-|De lado a la pared, rota con la cadera y lanza el balón con fuerza, recíbelo y repite hacia el mismo lado.|La cadera inicia el giro · Pies firmes|Balón más ligero|Balón más pesado o paso al frente
+sp2|Lanzamiento de balón sobre la cabeza|pliometría|cuerpo completo|i|balón medicinal||P|gb|-|Con el balón sobre la cabeza, lánzalo contra la pared o al piso con todo el cuerpo y recógelo.|Extiende cadera y brazos · Abdomen firme|Balón ligero|Con salto
+sp3|Saltos laterales de patinador|pliometría|glúteo|i|peso corporal|rodilla|P|gb|-|Salta de una pierna a la otra hacia el lado y aterriza estable sobre una pierna antes de saltar de nuevo.|Aterriza suave · Rodilla sobre el pie|Sin salto, solo paso lateral|Con pausa de 2 s al aterrizar
+sp4|Salto al cajón|pliometría|cuádriceps|i|caja|rodilla|P|gb|-|Salta con ambos pies sobre un cajón, extiende cadera arriba y baja caminando.|Aterriza suave · Cadera atrás|Cajón más bajo|Cajón más alto
+sp5|Arrastre de trineo|sentadilla|cuerpo completo|i|trineo||P|gb|-|Empuja o jala el trineo con pasos potentes y torso inclinado durante la distancia indicada.|Pasos largos · Espalda neutra|Menos carga|Más carga o más distancia
+sp6|Lanzamiento lateral con paso|rotacional|abdomen|a|balón medicinal||P|b|-|Da un paso en diagonal y lanza el balón con rotación de cadera a la pared como en un lanzamiento deportivo.|Cadera antes que brazos · Termina en equilibrio|Sin paso|Balón más pesado
+sp7|Escalera de agilidad|cardio|cuerpo completo|p|escalera de agilidad||A|gb|-|Recorre la escalera con pasos rápidos y cortos, un pie por cuadro, sin pisar las líneas.|Pasos cortos · Mirada al frente|Más lento|Con dos pies por cuadro
+sp8|Carrera de velocidad en 20 m|cardio|cuerpo completo|i|peso corporal|rodilla|A|gb|-|Acelera con el cuerpo inclinado durante 20 m al máximo esfuerzo y camina de regreso para recuperar.|Inclínate al arrancar · Brazos activos|A 80% de esfuerzo|Con arranque desde el piso
 `;
 
 export const exercises = RAW.trim().split('\n').map((l) => {

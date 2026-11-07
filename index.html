@@ -15,7 +15,7 @@
 <body>
 <header class="top"><div class="wrap">
   <a class="logo" href="./"><img src="logo-mark.svg" width="36" height="36" alt=""><b>C<i>-</i>LAB</b></a>
-  <nav class="links"><a href="#funciones">Funciones</a><a href="#portal">Portal del cliente</a><a href="#precios">Precios</a><a href="#preguntas">Preguntas</a></nav>
+  <nav class="links"><a href="#funciones">Funciones</a><a href="#portal">Portal del cliente</a><a href="#precios">Precios</a><a href="#contacto">Contacto</a><a href="#preguntas">Preguntas</a></nav>
   <span class="sp"></span>
   <a class="btn" href="app.html">Entrar</a><a class="btn pri" href="app.html?registro=1">Empezar gratis</a>
 </div></header>
@@ -129,6 +129,16 @@
     <details><summary>¿Sustituye a un médico o nutriólogo clínico?</summary><p>No. C-Lab es una herramienta de orientación para entrenadores. Los planes son sugerencias que tú revisas y ajustas, y no reemplazan una valoración médica.</p></details>
     <details><summary>¿Puedo llevarme mis datos?</summary><p>Sí. Puedes descargar un respaldo completo y exportar clientes y pagos a Excel (CSV) cuando quieras.</p></details>
   </div>
+</div></section>
+
+<section id="contacto" class="alt"><div class="wrap">
+  <div class="head"><span class="eyebrow">Contacto</span><h2 style="margin-top:16px">¿Dudas? Escríbenos directo</h2><p>Cuéntanos cómo entrenas y te decimos cómo C-Lab se adapta a tu forma de trabajar.</p></div>
+  <form id="contact-form" class="panel" style="max-width:560px;margin:0 auto;padding:22px;display:grid;gap:12px">
+    <input name="name" placeholder="Tu nombre" required autocomplete="name" style="padding:13px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:inherit;font:inherit">
+    <textarea name="msg" rows="4" placeholder="¿Qué necesitas? Ej. quiero usar C-Lab con mis clientes de béisbol" required style="padding:13px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:inherit;font:inherit"></textarea>
+    <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="submit" class="btn pri lg" data-via="wa" id="c-wa" hidden>Enviar por WhatsApp</button><button type="submit" class="btn lg" data-via="mail" id="c-mail" hidden>Enviar por correo</button></div>
+    <p id="c-none" class="mute" style="margin:0;font-size:14px">Muy pronto: por ahora puedes crear tu cuenta y probar C-Lab gratis.</p>
+  </form>
 </div></section>
 
 <section class="final"><div class="wrap"><h2>Pon en orden tu negocio de <span class="lime">entrenamiento</span></h2><p>Crea tu cuenta y prueba C-Lab con tus clientes reales.</p><a class="btn pri lg" href="app.html?registro=1">Empezar gratis</a></div></section>

@@ -37,7 +37,7 @@ const TRACK_NAME = { general: 'General', beisbol: 'Béisbol', fisicoculturismo: 
 const PATTERNS = ['sentadilla', 'bisagra', 'empuje', 'tirón', 'core', 'rotacional', 'pliometría', 'isométrico', 'cuidado del brazo', 'cardio', 'aislamiento', 'movilidad'];
 const GROUPS = ['pecho', 'espalda', 'hombro', 'bíceps', 'tríceps', 'cuádriceps', 'isquios', 'glúteo', 'pantorrilla', 'abdomen', 'lumbar', 'trapecio', 'antebrazo', 'cuerpo completo'];
 const TYPES = ['fuerza', 'potencia', 'isométrico', 'core', 'cardio', 'cuidado del brazo', 'movilidad'];
-const EQUIP = ['mancuernas', 'barra', 'kettlebell', 'banda', 'banco', 'polea', 'máquina', 'balón medicinal', 'caja', 'barra de dominadas', 'cuerda', 'rueda', 'trineo', 'cuerda pesada'];
+const EQUIP = ['mancuernas', 'barra', 'kettlebell', 'banda', 'banco', 'polea', 'máquina', 'balón medicinal', 'caja', 'barra de dominadas', 'cuerda', 'rueda', 'trineo', 'cuerda pesada', 'escalera de agilidad'];
 const INJURIES = ['rodilla', 'hombro', 'espalda', 'muñeca', 'codo', 'impacto'];
 const HABITS = { agua: ['💧', 'Tomar suficiente agua'], sueno: ['😴', 'Dormir 7+ horas'], pasos: ['🚶', 'Caminar 8,000 pasos'], proteina: ['🥩', 'Proteína en cada comida'], creatina: ['⚡', 'Tomar creatina'], movilidad: ['🧘', 'Movilidad 10 min'], azucar: ['🚫', 'Sin refrescos ni azúcar añadida'] };
 const BRAND_COLORS = ['#c6f432', '#2dd4bf', '#38bdf8', '#818cf8', '#f472b6', '#fb923c', '#f87171', '#facc15'];
@@ -167,6 +167,33 @@ const apptSort = (a, b) => (a.date + a.time).localeCompare(b.date + b.time);
 const payTag = (p) => (p.status === 'pagado' ? `<span class="tag ok">Pagado ${fdate(p.paidOn)}</span>` : p.due < today() ? '<span class="tag bad">Vencido</span>' : '<span class="tag warn">Pendiente</span>');
 const lastCheckin = (c) => [...(c.checkins || [])].sort((a, b) => b.date.localeCompare(a.date))[0];
 
+// Analíticas del negocio y de los clientes (últimos 30 días)
+function analyticsCard() {
+  const t = today(), month = t.slice(0, 7), active = S.clients.filter((c) => c.active);
+  if (!S.clients.length) return '';
+  const monthPays = S.payments.filter((p) => (p.due || p.paidOn || '').startsWith(month) || (p.paidOn || '').startsWith(month));
+  const paid = monthPays.filter((p) => p.status === 'pagado'), billed = monthPays.reduce((a, p) => a + p.amount, 0);
+  const rate = billed ? Math.round(paid.reduce((a, p) => a + p.amount, 0) / billed * 100) : null;
+  const ticket = paid.length ? Math.round(paid.reduce((a, p) => a + p.amount, 0) / paid.length) : 0;
+  const cut = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10), past = S.appointments.filter((a) => a.date >= cut && a.date <= t);
+  const done = past.filter((a) => a.status === 'realizada').length, canc = past.filter((a) => a.status === 'cancelada' || a.status === 'no asistió').length;
+  const attend = done + canc ? Math.round(done / (done + canc) * 100) : null;
+  const wlogs = mods.activity.logs.filter((l) => l.kind === 'workout' && l.created_at.slice(0, 10) >= new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10));
+  const trainers = new Set(wlogs.map((l) => l.client_id)).size;
+  const withPlan = active.filter((c) => c.routineId).length;
+  const dist = (get, names) => { const m = {}; active.forEach((c) => { const k = get(c) || 'otro'; m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k, n]) => [names?.[k] || k, n]); };
+  const byTrack = dist((c) => c.track || 'general', TRACK_NAME), byLevel = dist((c) => c.level), mxd = Math.max(1, active.length);
+  const bars = (rows) => rows.slice(0, 5).map(([k, n]) => `<div class="an-b"><span>${esc(k)}</span><div class="meter"><i style="width:${Math.round(n / mxd * 100)}%"></i></div><b>${n}</b></div>`).join('') || '<p class="mute small">Sin datos</p>';
+  const stat = (v, l, sub, cls = '') => `<div class="an-s ${cls}"><b>${v}</b><small>${l}</small>${sub ? `<em>${sub}</em>` : ''}</div>`;
+  return `<section class="card"><div class="row sp"><h3>Analíticas</h3><span class="mute small">Mes actual y últimos 30 días</span></div>
+    <div class="an-grid">${stat(rate === null ? '—' : rate + '%', 'Cobrado del total del mes', rate === null ? 'Sin cobros este mes' : `${money(billed)} facturado`, rate !== null && rate < 70 ? 'warnc' : '')}
+      ${stat(ticket ? money(ticket) : '—', 'Ticket promedio', paid.length + ' pago(s) cobrados')}
+      ${stat(attend === null ? '—' : attend + '%', 'Asistencia a citas', `${done} realizadas · ${canc} canceladas`, attend !== null && attend < 75 ? 'warnc' : '')}
+      ${stat(active.length ? `${trainers}/${active.length}` : '—', 'Entrenaron esta semana', active.length ? Math.round(trainers / active.length * 100) + '% de tus clientes' : '')}
+      ${stat(active.length ? `${withPlan}/${active.length}` : '—', 'Con programa asignado', active.length - withPlan ? `${active.length - withPlan} sin programa` : 'Todos cubiertos', active.length - withPlan ? 'warnc' : '')}</div>
+    <div class="cols"><div><h4 class="an-h">Clientes por perfil</h4>${bars(byTrack)}</div><div><h4 class="an-h">Clientes por nivel</h4>${bars(byLevel)}</div></div></section>`;
+}
+
 V.home = () => {
   const t = today(), month = t.slice(0, 7);
   const active = S.clients.filter((c) => c.active);
@@ -208,7 +235,7 @@ V.home = () => {
         ${todays.length ? todays.map((a) => `<div class="tl t-${a.type}"><b>${a.time}</b><div><span>${esc(apptWho(a))}</span><small>${a.duration || 60} min · ${a.type}${a.notes ? ' · ' + esc(a.notes) : ''}</small></div><span class="tag ${a.status === 'realizada' ? 'ok' : a.status === 'programada' ? '' : 'bad'}">${a.status}</span></div>`).join('') : '<p class="mute empty">No hay citas para hoy.</p>'}</section>
       <section class="card"><h3>Ingresos · últimos 6 meses</h3><div class="chart2"><div class="grid-l">${[1, 0.75, 0.5, 0.25, 0].map((f) => `<div style="bottom:${f * 100}%"><span>${short(Math.round(top * f))}</span></div>`).join('')}</div>
         <div class="bars">${inc.map((v, i) => `<div class="cb"><i style="height:${(v / top) * 100}%" title="${money(v)}"><em>${v ? short(v) : ''}</em></i><small>${new Date(months[i] + '-15').toLocaleDateString('es-MX', { month: 'short' })}</small></div>`).join('')}</div></div></section></div>
-    ${riskCard()}${activityCard()}<div class="cols wide2"><section class="card"><h3>Atención requerida</h3>${alerts.length ? alerts.slice(0, 7).map((a) => `<a class="al ${a[0]}" href="${a[2]}">${ic(a[0] === 'info' ? 'clip' : 'alert', 16)}<span>${a[1]}</span></a>`).join('') : '<p class="mute empty">Todo en orden 🎉</p>'}</section>
+    ${analyticsCard()}${riskCard()}${activityCard()}<div class="cols wide2"><section class="card"><h3>Atención requerida</h3>${alerts.length ? alerts.slice(0, 7).map((a) => `<a class="al ${a[0]}" href="${a[2]}">${ic(a[0] === 'info' ? 'clip' : 'alert', 16)}<span>${a[1]}</span></a>`).join('') : '<p class="mute empty">Todo en orden 🎉</p>'}</section>
       <section class="card hero"><div><h3>✨ Entrenamiento grupal con IA</h3><p>Elige a los clientes de una sesión y genera un circuito donde todos participan, adaptado a nivel y lesiones de cada uno, con el tiempo de atención que merece cada cliente.</p></div>${btn('Crear sesión grupal', 'go', 'data-to="#/entrenar"', 'zap', 'pri')}</section></div>`);
 };
 
@@ -729,7 +756,7 @@ V.recibo = (id) => {
   const p = find('payments', id); if (!p) return '<p>No encontrado</p>'; const c = cl(p.clientId);
   const folio = 'R-' + p.id.slice(-6).toUpperCase();
   return `<div class="bar noprint"><a href="#/pagos">${ic('back', 16)} Volver</a><span class="grow"></span><button class="pri" onclick="print()">${ic('print', 16)}Imprimir / Guardar PDF</button></div>
-  <article class="sheet receipt"><header class="sh-h"><div class="sh-b">${logoMark(46)}<div><b>${esc(S.settings?.brand || 'C-Lab')}</b><small>Coaching Lab</small></div></div><div class="sh-t"><h1>Recibo de pago</h1><p>Folio ${folio}</p></div></header>
+  <article class="sheet receipt"><header class="sh-h"><div class="sh-b">${S.settings?.logo ? `<img src="${S.settings.logo}" alt="" style="width:46px;height:46px;border-radius:12px;object-fit:cover">` : logoMark(46)}<div><b>${esc(S.settings?.brand || 'C-Lab')}</b><small>Coaching Lab</small></div></div><div class="sh-t"><h1>Recibo de pago</h1><p>Folio ${folio}</p></div></header>
   <div class="rc-body"><div class="rc-amount"><small>Monto recibido</small><b>${money(p.amount)}</b></div>
   <table class="sh-t1"><tbody><tr><th>Cliente</th><td>${esc(c?.name || '—')}</td></tr><tr><th>Concepto</th><td>${esc(p.concept)}</td></tr><tr><th>Vencimiento</th><td>${fdate(p.due)}</td></tr><tr><th>Fecha de pago</th><td>${p.paidOn ? fdate(p.paidOn) : '—'}</td></tr><tr><th>Método</th><td>${esc(p.method || '—')}</td></tr><tr><th>Estado</th><td><b>${p.status === 'pagado' ? 'PAGADO' : 'PENDIENTE'}</b></td></tr></tbody></table>
   <p class="mute small" style="margin-top:24px">Comprobante de pago por servicios de entrenamiento. Este recibo no es una factura fiscal.</p></div>
